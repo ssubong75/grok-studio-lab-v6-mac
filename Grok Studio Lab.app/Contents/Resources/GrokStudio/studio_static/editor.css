@@ -149,6 +149,25 @@ button {
   background-color: #171a1d !important;
 }
 
+#imageEditor .tui-image-editor-submenu > div {
+  position: relative;
+}
+
+#imageEditor .custom-submenu-title {
+  position: absolute;
+  top: calc(var(--editor-bar-height) + 8px);
+  left: 4px;
+  z-index: 20;
+  margin: 0;
+  padding: 3px 6px;
+  background: #171a1d;
+  color: var(--accent);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.2;
+  pointer-events: none;
+}
+
 #imageEditor .tui-image-editor-menu > .tui-image-editor-item.active,
 #imageEditor .tui-image-editor-help-menu > .tui-image-editor-item.active {
   background-color: transparent !important;
@@ -471,9 +490,10 @@ button {
   scrollbar-color: #596166 #171a1d;
 }
 
-#imageEditor .tui-image-editor-canvas-container,
-#imageEditor .lower-canvas,
-#imageEditor .upper-canvas {
+#imageEditor .tui-image-editor-wrap,
+#imageEditor .tui-image-editor-size-wrap,
+#imageEditor .tui-image-editor-align-wrap,
+#imageEditor .tui-image-editor-canvas-container {
   background-color: #000 !important;
 }
 
@@ -532,18 +552,21 @@ button {
   left: 64px;
   display: none;
   width: 248px;
-  padding: 150px 22px 24px;
+  flex-direction: column;
+  justify-content: center;
+  padding: 24px 22px;
   overflow-y: auto;
   border-right: 1px solid rgb(255 255 255 / 0.08);
   background: #171a1d;
 }
 
 #imageEditor .custom-tool-panel.active {
-  display: block;
+  display: flex;
 }
 
 #imageEditor .custom-tool-panel h3 {
-  margin: 0 0 24px;
+  width: 100%;
+  margin: 0 0 28px;
   color: var(--accent);
   font-size: 17px;
 }
@@ -554,6 +577,10 @@ button {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 9px;
   margin-bottom: 18px;
+}
+
+#imageEditor .custom-tool-choice-row {
+  width: 100%;
 }
 
 #imageEditor .custom-tool-button {
@@ -567,6 +594,16 @@ button {
   font-weight: 700;
 }
 
+#imageEditor .selection-rectangle,
+#imageEditor .selection-ellipse,
+#imageEditor .eraser-hard,
+#imageEditor .eraser-soft {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  min-height: 0;
+}
+
 #imageEditor .custom-tool-button:hover,
 #imageEditor .custom-tool-button.active {
   border-color: var(--accent);
@@ -578,9 +615,9 @@ button {
 #imageEditor .eraser-hard::before,
 #imageEditor .eraser-soft::before {
   display: block;
-  width: 24px;
-  height: 18px;
-  margin: 0 auto 5px;
+  width: 28px;
+  height: 28px;
+  margin: 0;
   border: 1.5px dashed currentColor;
   content: "";
 }
@@ -605,6 +642,39 @@ button {
 #imageEditor .custom-tool-panel .custom-range-control {
   width: 100%;
   margin-top: 20px;
+}
+
+#imageEditor .custom-flip-button {
+  display: grid;
+  gap: 4px;
+  place-items: center;
+  min-height: 64px;
+  border: 0;
+  background: transparent;
+}
+
+#imageEditor .custom-flip-button svg {
+  width: 32px;
+  height: 32px;
+}
+
+#imageEditor .custom-flip-button label {
+  color: currentColor;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+#imageEditor .custom-flip-button svg > use {
+  display: none;
+}
+
+#imageEditor .custom-flip-button svg > use.normal {
+  display: block;
+}
+
+#imageEditor .custom-flip-button svg > use {
+  fill: currentColor !important;
+  stroke: currentColor !important;
 }
 
 #imageEditor .custom-style-options {
@@ -654,41 +724,32 @@ button {
   opacity: 0.28;
 }
 
-#imageEditor .custom-icon-library {
-  display: grid;
-  grid-template-columns: repeat(3, 52px);
-  gap: 12px;
-  justify-content: center;
-  width: 244px;
-  margin-top: 20px;
-  margin-left: 4px !important;
-  padding-top: 18px;
-  border-top: 1px solid #3c3c3c;
-}
-
 #imageEditor .custom-icon-button {
-  display: grid;
-  place-items: center;
-  width: 52px;
-  height: 52px;
-  border: 1px solid #42494d;
-  border-radius: 5px;
-  background: #111315;
-  color: #a9b1b5;
+  border: 0 !important;
+  background: transparent !important;
+  color: #a9b1b5 !important;
 }
 
 #imageEditor .custom-icon-button:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+  color: var(--accent) !important;
 }
 
 #imageEditor .custom-icon-button svg {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   overflow: visible;
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 1.5;
+  stroke-width: 0.75;
+}
+
+#imageEditor .custom-icon-button label {
+  display: block;
+  margin-top: 1px;
+  color: currentColor;
+  font-family: "Noto Sans", sans-serif;
+  font-size: 11px;
+  font-weight: 400;
 }

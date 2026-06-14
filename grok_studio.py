@@ -923,6 +923,7 @@ class Library:
             "version": 3,
             "categories": ["Inbox", "Image", "Video", "Prompt", "Finals"],
             "gallery_folders": [],
+            "gallery_sort": "",
             "items": [],
         }
 
@@ -1010,6 +1011,7 @@ class Library:
         return {
             "categories": data.get("categories", []),
             "gallery_folders": data.get("gallery_folders", []),
+            "gallery_sort": str(data.get("gallery_sort") or ""),
             "items": items,
             "library": self.info(),
         }
@@ -1235,7 +1237,7 @@ class Library:
         self._write(data)
         return folder
 
-    def update_gallery_folder_layout(self, folders: Any) -> dict[str, Any]:
+    def update_gallery_folder_layout(self, folders: Any, sort_mode: Any = None) -> dict[str, Any]:
         if not isinstance(folders, list):
             raise StudioError("Folder layout is invalid.")
         data = self._read()
@@ -1257,8 +1259,15 @@ class Library:
             if "grid_slot" in entry and folder.get("parent_id"):
                 folder["grid_slot"] = max(0, int(entry.get("grid_slot") or 0))
             updated.append(folder_id)
+        if sort_mode is not None:
+            normalized_sort = str(sort_mode or "")
+            data["gallery_sort"] = normalized_sort if normalized_sort in {"abc", "ko"} else ""
         self._write(data)
-        return {"updated": updated, "gallery_folders": data.get("gallery_folders", [])}
+        return {
+            "updated": updated,
+            "gallery_folders": data.get("gallery_folders", []),
+            "gallery_sort": str(data.get("gallery_sort") or ""),
+        }
 
     def gallery_folder(self, folder_id: str, data: dict[str, Any] | None = None) -> dict[str, Any]:
         data = data or self._read()
@@ -1882,6 +1891,7 @@ class StudioApp:
             "library": library_state.get("library") or self.library.info(),
             "categories": library_state["categories"],
             "gallery_folders": library_state["gallery_folders"],
+            "gallery_sort": library_state.get("gallery_sort") or "",
             "items": library_state["items"],
             "uploads": self.list_uploaded_images(),
             "jobs": self.jobs.all(),
@@ -3098,7 +3108,10 @@ def make_handler(app: StudioApp) -> type[BaseHTTPRequestHandler]:
                 )
                 self.send_json({"folder": folder, "state": app.state()})
             elif path == "/api/gallery/folders/layout":
-                self.send_json(app.library.update_gallery_folder_layout(payload.get("folders")))
+                self.send_json(app.library.update_gallery_folder_layout(
+                    payload.get("folders"),
+                    payload.get("sort_mode") if "sort_mode" in payload else None,
+                ))
             elif path == "/api/prompts":
                 self.send_json({"item": app.save_prompt(payload)})
             elif path == "/api/analyze":

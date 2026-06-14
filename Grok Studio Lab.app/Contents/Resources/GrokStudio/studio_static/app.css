@@ -5040,8 +5040,8 @@ html.platform-windows .detail-video-player .video-volume-slider::-webkit-slider-
 
 .gallery-sort-buttons {
   display: flex;
+  align-items: center;
   gap: 6px;
-  margin-right: auto;
 }
 
 .gallery-sort-buttons button {
@@ -5059,6 +5059,18 @@ html.platform-windows .detail-video-player .video-volume-slider::-webkit-slider-
 .gallery-sort-buttons button.active {
   border-color: var(--accent);
   color: #fff;
+}
+
+.gallery-sort-buttons .save-gallery-sort-button {
+  margin-left: 3ch;
+  border-color: transparent;
+  background: transparent;
+  color: var(--accent);
+}
+
+.gallery-sort-buttons .save-gallery-sort-button:hover {
+  border-color: transparent;
+  color: var(--accent);
 }
 
 .folder-gallery-actions {
@@ -5132,6 +5144,14 @@ html.platform-windows .detail-video-player .video-volume-slider::-webkit-slider-
   grid-template-columns: minmax(205px, 0.85fr) minmax(0, 4fr);
   gap: 14px;
   min-height: 0;
+}
+
+.secondary-folder-panel > .folder-panel-heading {
+  justify-content: flex-start;
+}
+
+.secondary-folder-panel > .folder-panel-heading strong {
+  margin-left: auto;
 }
 
 .primary-folder-panel,

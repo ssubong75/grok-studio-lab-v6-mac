@@ -429,7 +429,7 @@ function showCustomPanel(name) {
   document.querySelector(`[data-custom-tool="${name}"]`)?.classList.add("active");
 }
 
-function addCustomMainTool(name, label, iconClass) {
+function addCustomMainTool(name, label, iconClass, position = "last") {
   const menu = document.querySelector(".tui-image-editor-menu");
   if (!menu) return null;
   const button = document.createElement("li");
@@ -437,8 +437,36 @@ function addCustomMainTool(name, label, iconClass) {
   button.dataset.customTool = name;
   button.setAttribute("tooltip-content", label);
   button.innerHTML = `<button type="button" aria-label="${label}"><span aria-hidden="true"></span></button>`;
-  menu.appendChild(button);
+  if (position === "first") {
+    menu.insertBefore(button, menu.firstElementChild);
+  } else if (position === "after-draw") {
+    const draw = menu.querySelector(".tie-btn-draw");
+    draw?.after(button);
+  } else {
+    menu.appendChild(button);
+  }
   return button;
+}
+
+function installSubmenuTitles() {
+  const labels = {
+    crop: "Crop",
+    flip: "Flip",
+    rotate: "Rotate",
+    draw: "Draw",
+    shape: "Shape",
+    icon: "Icon",
+    text: "Text",
+    filter: "Filter",
+  };
+  Object.entries(labels).forEach(([menuName, label]) => {
+    const submenu = document.querySelector(`.tui-image-editor-menu-${menuName}`);
+    if (!submenu || submenu.querySelector(".custom-submenu-title")) return;
+    const title = document.createElement("h3");
+    title.className = "custom-submenu-title";
+    title.textContent = label;
+    submenu.prepend(title);
+  });
 }
 
 function activateBuiltInMenu(menuName) {
@@ -505,16 +533,17 @@ function installIconAndTextStyles() {
 
 function installCustomIcons() {
   imageEditor.registerIcons(customIconPaths);
-  const list = document.querySelector(".tui-image-editor-menu-icon .tui-image-editor-submenu-item");
-  if (!list) return;
-  const host = document.createElement("li");
-  host.className = "custom-icon-library tui-image-editor-newline";
-  Object.entries(customIconPaths).forEach(([name, path]) => {
-    const button = document.createElement("button");
+  const host = document.querySelector(".tui-image-editor-menu-icon .tie-icon-add-button");
+  if (!host) return;
+  Object.entries(customIconPaths).forEach(([name, path], index) => {
+    const button = document.createElement("div");
     button.type = "button";
-    button.className = "custom-icon-button";
-    button.title = name;
-    button.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"></path></svg>`;
+    button.className = "tui-image-editor-button custom-icon-button";
+    button.dataset.icontype = name;
+    button.setAttribute("role", "button");
+    button.setAttribute("tabindex", "0");
+    button.setAttribute("aria-label", `Bubble${index + 1}`);
+    button.innerHTML = `<div><svg class="svg_ic-submenu" viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"></path></svg></div><label>Bubble${index + 1}</label>`;
     button.addEventListener("click", () => {
       pendingIconKind = "stroke";
       pendingIconName = name;
@@ -526,9 +555,11 @@ function installCustomIcons() {
         strokeWidth: Number(iconStylePanel?.strokeWidth.range.value || 2),
       });
     });
+    button.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") button.click();
+    });
     host.appendChild(button);
   });
-  list.appendChild(host);
 }
 
 function installHandTool() {
@@ -737,8 +768,15 @@ function makeActionButton(label, onClick, className = "") {
   return button;
 }
 
+function makeFlipActionButton(axis, onClick) {
+  const label = axis === "x" ? "Flip X" : "Flip Y";
+  const button = makeActionButton(label, onClick, `custom-flip-button flip-${axis}`);
+  button.innerHTML = `<svg class="svg_ic-submenu" aria-hidden="true"><use xlink:href="#ic-flip-${axis}" class="normal use-default"></use><use xlink:href="#ic-flip-${axis}" class="active use-default"></use></svg><label>${label}</label>`;
+  return button;
+}
+
 function installSelectionTool() {
-  const button = addCustomMainTool("selection", "Selection", "custom-selection-tool");
+  const button = addCustomMainTool("selection", "Selection", "custom-selection-tool", "first");
   const panel = makeToolPanel("selection", "Selection");
   const shapes = document.createElement("div");
   const actions = document.createElement("div");
@@ -751,17 +789,17 @@ function installSelectionTool() {
     rect.classList.add("active");
     circle.classList.remove("active");
   }, "selection-rectangle active");
+  rect.textContent = "";
+  rect.setAttribute("aria-label", "Rectangle selection");
   const circle = makeActionButton("Ellipse", () => {
     selectionShape = "ellipse";
     circle.classList.add("active");
     rect.classList.remove("active");
   }, "selection-ellipse");
+  circle.textContent = "";
+  circle.setAttribute("aria-label", "Ellipse selection");
   shapes.append(rect, circle);
   actions.append(
-    makeActionButton("Copy", copySelection),
-    makeActionButton("Cut", cutSelection),
-    makeActionButton("Paste", pasteSelection),
-    makeActionButton("Delete", replaceWithDeletedSelection),
     makeActionButton("Inverse", () => {
       selectionInverse = !selectionInverse;
       setStatus(selectionInverse ? "Inverse selection enabled." : "Inverse selection disabled.");
@@ -769,8 +807,8 @@ function installSelectionTool() {
     makeActionButton("Move", moveSelection),
   );
   transforms.append(
-    makeActionButton("Flip X", () => flipMovedSelection("x"), "flip-x"),
-    makeActionButton("Flip Y", () => flipMovedSelection("y"), "flip-y"),
+    makeFlipActionButton("x", () => flipMovedSelection("x")),
+    makeFlipActionButton("y", () => flipMovedSelection("y")),
   );
   const feather = makeCustomRange("Feather", 0, 100, 0, (value) => {
     selectionFeather = value;
@@ -846,7 +884,7 @@ function applyEraserBrush() {
 }
 
 function installEraserTool() {
-  const button = addCustomMainTool("eraser", "Eraser", "custom-eraser-tool");
+  const button = addCustomMainTool("eraser", "Eraser", "custom-eraser-tool", "after-draw");
   const panel = makeToolPanel("eraser", "Eraser");
   const brushes = document.createElement("div");
   brushes.className = "custom-tool-choice-row";
@@ -856,12 +894,16 @@ function installEraserTool() {
     soft.classList.remove("active");
     applyEraserBrush();
   }, "eraser-hard active");
+  hard.textContent = "";
+  hard.setAttribute("aria-label", "Hard eraser");
   const soft = makeActionButton("Soft", () => {
     eraserSoft = true;
     soft.classList.add("active");
     hard.classList.remove("active");
     applyEraserBrush();
   }, "eraser-soft");
+  soft.textContent = "";
+  soft.setAttribute("aria-label", "Soft eraser");
   brushes.append(hard, soft);
   const size = makeCustomRange("Size", 1, 200, eraserSize, (value) => {
     eraserSize = value;
@@ -1169,6 +1211,7 @@ function init() {
   });
   installCustomOptionPanels();
   normalizeEditorLabels();
+  installSubmenuTitles();
   installIconAndTextStyles();
   installCustomIcons();
   installHandTool();

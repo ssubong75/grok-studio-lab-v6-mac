@@ -16,6 +16,8 @@ const state = {
   selectedPrimaryFolderId: "",
   selectedSecondaryFolderId: "",
   gallerySort: "",
+  gallerySavedSort: "",
+  galleryDraftLayout: null,
   mode: "image",
   selectedVideoId: "",
   notifiedJobs: new Set(),
@@ -64,6 +66,7 @@ const els = {
   makeFolderBtn: $("#makeFolderBtn"),
   renameFolderBtn: $("#renameFolderBtn"),
   deleteFolderBtn: $("#deleteFolderBtn"),
+  saveGallerySortBtn: $("#saveGallerySortBtn"),
   primaryFolderList: $("#primaryFolderList"),
   secondaryFolderGrid: $("#secondaryFolderGrid"),
   secondaryFolderTitle: $("#secondaryFolderTitle"),
@@ -289,6 +292,8 @@ async function loadState() {
   state.items = data.items || [];
   state.categories = data.categories || [];
   state.galleryFolders = data.gallery_folders || [];
+  state.gallerySavedSort = data.gallery_sort || "";
+  if (state.view !== "folder-gallery") state.gallerySort = state.gallerySavedSort;
   state.jobs = data.jobs || [];
   state.uploads = data.uploads || [];
   state.auth = data.auth || null;
@@ -371,16 +376,28 @@ function secondaryGalleryFolders(parentId) {
     occupied.add(slot);
     nextSlot = Math.max(nextSlot, slot + 1);
   });
-  return folders.sort((a, b) => Number(a.grid_slot) - Number(b.grid_slot));
+  const draft = state.galleryDraftLayout?.parentId === parentId
+    ? state.galleryDraftLayout.slots
+    : null;
+  return folders
+    .map((folder) => (
+      draft && Object.hasOwn(draft, folder.id)
+        ? { ...folder, grid_slot: draft[folder.id] }
+        : folder
+    ))
+    .sort((a, b) => Number(a.grid_slot) - Number(b.grid_slot));
 }
 
-async function saveGalleryFolderLayout(entries) {
-  if (!entries.length) return;
+async function saveGalleryFolderLayout(entries, options = {}) {
+  if (!entries.length && !Object.hasOwn(options, "sortMode")) return;
+  const body = { folders: entries };
+  if (Object.hasOwn(options, "sortMode")) body.sort_mode = options.sortMode;
   const data = await api("/api/gallery/folders/layout", {
     method: "POST",
-    body: JSON.stringify({ folders: entries }),
+    body: JSON.stringify(body),
   });
   state.galleryFolders = data.gallery_folders || state.galleryFolders;
+  if (Object.hasOwn(data, "gallery_sort")) state.gallerySavedSort = data.gallery_sort || "";
 }
 
 async function sortSecondaryGalleryFolders(mode) {
@@ -397,11 +414,25 @@ async function sortSecondaryGalleryFolders(mode) {
   document.querySelectorAll("[data-gallery-sort]").forEach((button) => {
     button.classList.toggle("active", button.dataset.gallerySort === mode);
   });
-  await saveGalleryFolderLayout(folders.map((folder, index) => ({
-    id: folder.id,
-    order: index,
-    grid_slot: index,
-  })));
+  state.galleryDraftLayout = {
+    parentId,
+    slots: Object.fromEntries(folders.map((folder, index) => [folder.id, index])),
+  };
+  renderFolderGallery();
+}
+
+async function saveCurrentGallerySort() {
+  const parentId = state.selectedPrimaryFolderId;
+  const entries = parentId
+    ? secondaryGalleryFolders(parentId).map((folder, index) => ({
+      id: folder.id,
+      order: index,
+      grid_slot: Number(folder.grid_slot) || 0,
+    }))
+    : [];
+  await saveGalleryFolderLayout(entries, { sortMode: state.gallerySort });
+  state.gallerySort = state.gallerySavedSort;
+  state.galleryDraftLayout = null;
   renderFolderGallery();
 }
 
@@ -422,12 +453,14 @@ async function moveSecondaryFolderToSlot(folderId, rawSlot) {
   if (!folder?.parent_id) return;
   const slot = Math.max(0, Number(rawSlot) || 0);
   const siblings = secondaryGalleryFolders(folder.parent_id);
+  const displayedFolder = siblings.find((candidate) => candidate.id === folderId);
   const occupied = siblings.find((candidate) => candidate.id !== folderId && Number(candidate.grid_slot) === slot);
-  const oldSlot = Math.max(0, Number(folder.grid_slot) || 0);
+  const oldSlot = Math.max(0, Number(displayedFolder?.grid_slot ?? folder.grid_slot) || 0);
   const entries = [{ id: folderId, grid_slot: slot }];
   if (occupied) entries.push({ id: occupied.id, grid_slot: oldSlot });
   await saveGalleryFolderLayout(entries);
   state.gallerySort = "";
+  state.galleryDraftLayout = null;
   document.querySelectorAll("[data-gallery-sort]").forEach((button) => button.classList.remove("active"));
   renderFolderGallery();
 }
@@ -505,6 +538,8 @@ function openPrimaryHome(options = {}) {
 function openFolderGallery(options = {}) {
   if (state.view === "detail") closeDetail({ fromHistory: true });
   state.view = "folder-gallery";
+  state.gallerySort = state.gallerySavedSort;
+  state.galleryDraftLayout = null;
   state.selectedItems.clear();
   syncWorkspaceView();
   renderFolderGallery();
@@ -553,6 +588,9 @@ function renderFolderGallery() {
   if (els.secondaryFolderTitle) {
     els.secondaryFolderTitle.textContent = selectedPrimary ? "" : "Select a collection";
   }
+  document.querySelectorAll("[data-gallery-sort]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.gallerySort === state.gallerySort);
+  });
   els.primaryFolderList.innerHTML = primaryFolders.length
     ? primaryFolders.map((folder) => `
       <button class="primary-folder-card${folder.id === state.selectedPrimaryFolderId ? " active" : ""}" type="button" draggable="true" data-primary-folder-id="${escapeHtml(folder.id)}">
@@ -4790,6 +4828,9 @@ function bindEvents() {
       sortSecondaryGalleryFolders(button.dataset.gallerySort || "abc")
         .catch((error) => toastError(error.message));
     });
+  });
+  els.saveGallerySortBtn?.addEventListener("click", () => {
+    saveCurrentGallerySort().catch((error) => toastError(error.message));
   });
   els.makeFolderBtn?.addEventListener("click", () => {
     makeGalleryFolder().catch((error) => toastError(error.message));
