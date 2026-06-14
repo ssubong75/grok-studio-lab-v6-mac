@@ -1,0 +1,694 @@
+:root {
+  color-scheme: dark;
+  --editor-bar-height: 68px;
+  --editor-lift: 64px;
+  --line: rgb(255 255 255 / 0.12);
+  --panel: #151719;
+  --text: #f4f7f7;
+  --muted: #9ca4a8;
+  --accent: #fbad2e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #08090a;
+  color: var(--text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+button,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.editor-toolbar {
+  position: fixed;
+  z-index: 2147483647;
+  top: 0;
+  left: 0;
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  width: 100%;
+  height: var(--editor-bar-height);
+  padding: 0 20px;
+  border-bottom: 1px solid var(--line);
+  background: #0d0f10;
+  opacity: 1;
+  visibility: visible;
+}
+
+.editor-title,
+.editor-actions {
+  display: flex;
+  align-items: center;
+}
+
+.editor-title {
+  position: absolute;
+  left: 64px;
+  justify-content: center;
+  width: 248px;
+  pointer-events: none;
+}
+
+.editor-title strong {
+  color: var(--accent);
+  font-size: 24px;
+  font-weight: 850;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.editor-actions {
+  justify-content: flex-end;
+  gap: 9px;
+}
+
+#editorStatus {
+  max-width: 220px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#editorStatus.error {
+  color: #ff9191;
+}
+
+.secondary-button,
+.save-button {
+  min-height: 34px;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.save-button {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #111;
+}
+
+.save-button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+#imageEditor {
+  width: 100%;
+  height: calc(100% - var(--editor-bar-height));
+  margin-top: var(--editor-bar-height);
+}
+
+#imageEditor .tui-image-editor-container,
+#imageEditor .tui-image-editor-main {
+  background-color: #08090a !important;
+}
+
+#imageEditor .tui-image-editor-main {
+  transform: translateY(calc(-1 * var(--editor-lift)));
+}
+
+#imageEditor .tui-image-editor-menu {
+  transform: translateY(calc(-1 * var(--editor-lift)));
+}
+
+#imageEditor .tui-image-editor-help-menu.right {
+  transform: translateY(calc(-50% - var(--editor-lift))) !important;
+}
+
+#imageEditor .tui-image-editor-header {
+  display: none;
+}
+
+#imageEditor .tui-image-editor-menu {
+  background-color: #111315 !important;
+}
+
+#imageEditor .tui-image-editor-submenu {
+  background-color: #171a1d !important;
+}
+
+#imageEditor .tui-image-editor-menu > .tui-image-editor-item.active,
+#imageEditor .tui-image-editor-help-menu > .tui-image-editor-item.active {
+  background-color: transparent !important;
+}
+
+#imageEditor .tui-image-editor-menu > .tui-image-editor-item.active svg > use.active {
+  display: block !important;
+}
+
+#imageEditor .tui-image-editor-menu > .tui-image-editor-item.active svg > use.normal {
+  display: none !important;
+}
+
+#imageEditor .tie-crop-preset-button {
+  display: none !important;
+}
+
+#imageEditor .tui-image-editor-menu-crop .tui-image-editor-partition.only-left-right {
+  display: none;
+}
+
+#imageEditor .custom-crop-options,
+#imageEditor .custom-font-options {
+  display: block !important;
+  width: 100%;
+  margin-top: 0 !important;
+  padding: 0 18px;
+}
+
+#imageEditor .custom-crop-options {
+  position: relative;
+  top: -28px;
+  padding-top: 12px;
+  padding-bottom: 13px;
+}
+
+#imageEditor .custom-crop-options::after,
+#imageEditor .custom-font-options::after {
+  position: absolute;
+  left: 50%;
+  width: 75%;
+  height: 1px;
+  background: #3c3c3c;
+  content: "";
+  transform: translateX(-50%);
+}
+
+#imageEditor .custom-crop-options::after {
+  bottom: -23px;
+}
+
+#imageEditor .custom-font-options {
+  position: relative;
+  top: -28px;
+  width: 75%;
+  margin-right: auto !important;
+  margin-left: auto !important;
+  padding-right: 0;
+  padding-left: 0;
+}
+
+#imageEditor .custom-font-options::after {
+  bottom: -23px;
+  width: 100%;
+}
+
+.crop-ratios {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 15px 8px;
+  width: 100%;
+}
+
+.crop-ratios button {
+  display: grid;
+  gap: 6px;
+  place-items: center;
+  min-width: 0;
+  min-height: 56px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #8f969a;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.crop-ratios button::before {
+  content: "";
+  display: block;
+  width: 26px;
+  height: 20px;
+  border: 2px solid currentColor;
+  border-top-width: 1px;
+  border-left-width: 1px;
+  box-shadow:
+    6px 5px 0 -5px #171a1d,
+    6px 5px 0 -3px currentColor;
+}
+
+.crop-ratios button:hover,
+.crop-ratios button.active {
+  color: var(--accent);
+}
+
+.font-control {
+  display: grid;
+  gap: 7px;
+  width: 100%;
+  padding: 0 0 16px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: left;
+}
+
+.font-control select {
+  width: 100%;
+  min-height: 34px;
+  padding: 0 30px 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+#imageEditor .tui-image-editor-menu-text .tui-image-editor-submenu-item {
+  padding-top: 12px;
+}
+
+#imageEditor .tui-image-editor-menu-text .tui-image-editor-submenu-item > li:not(.custom-font-options) {
+  margin-top: 13px;
+}
+
+#imageEditor .tui-image-editor-menu-text .tie-text-effect-button {
+  margin-top: 23px;
+}
+
+#imageEditor .tui-image-editor-menu-crop .tie-crop-button.action {
+  margin-top: 16px;
+}
+
+.feather-control,
+.custom-range-control {
+  display: block;
+  width: 75%;
+  margin-right: auto !important;
+  margin-left: auto !important;
+  padding: 0;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.feather-label,
+.custom-range-label {
+  display: block;
+  width: 100%;
+  margin: 0 0 7px;
+}
+
+.feather-inputs,
+.custom-range-inputs {
+  display: grid;
+  grid-template-columns: 136px 40px;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+}
+
+.feather-inputs input[type="range"],
+.custom-range-inputs input[type="range"] {
+  --range-fill: 0%;
+  width: 100% !important;
+  min-width: 0;
+  height: 2px;
+  margin: 0;
+  appearance: none;
+  border: 0;
+  outline: none;
+  background: linear-gradient(
+    to right,
+    #d1d1d1 0,
+    #d1d1d1 var(--range-fill),
+    #666 var(--range-fill),
+    #666 100%
+  );
+  cursor: pointer;
+}
+
+.feather-inputs input[type="range"]::-webkit-slider-thumb,
+.custom-range-inputs input[type="range"]::-webkit-slider-thumb {
+  width: 12px;
+  height: 12px;
+  appearance: none;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.feather-inputs input[type="number"],
+.custom-range-inputs input[type="number"] {
+  width: 40px !important;
+  min-width: 40px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid #d5d5d5;
+  border-radius: 2px;
+  appearance: textfield;
+  outline: none;
+  background: #1c1c1c;
+  color: #fff;
+  cursor: default;
+  font-family: "Noto Sans", sans-serif;
+  font-size: 11px;
+  font-weight: lighter;
+  line-height: 22px;
+  text-align: center;
+}
+
+.feather-inputs input[type="number"]::-webkit-inner-spin-button,
+.feather-inputs input[type="number"]::-webkit-outer-spin-button,
+.custom-range-inputs input[type="number"]::-webkit-inner-spin-button,
+.custom-range-inputs input[type="number"]::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+#imageEditor .tie-draw-range-value,
+#imageEditor .tie-stroke-range-value,
+#imageEditor .tie-text-range-value {
+  width: 40px !important;
+  height: 24px !important;
+  margin-left: 4px !important;
+  padding: 0 !important;
+  border: 1px solid #d5d5d5 !important;
+  border-radius: 2px !important;
+  outline: none !important;
+  background: #1c1c1c !important;
+  color: #fff !important;
+  font-family: "Noto Sans", sans-serif !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
+  line-height: 22px !important;
+  text-align: center !important;
+}
+
+.feather-control.is-disabled {
+  opacity: 0.38;
+}
+
+#imageEditor .custom-feather-options {
+  display: block;
+  width: 244px;
+  margin-left: 4px !important;
+  margin-top: 15px;
+}
+
+#imageEditor .custom-opacity-options {
+  display: block;
+  width: 244px;
+  margin-left: 4px !important;
+  margin-top: 15px;
+}
+
+#imageEditor .tui-image-editor-menu-shape .custom-opacity-options {
+  margin-top: 18px;
+}
+
+#imageEditor .tui-image-editor-submenu .tui-image-editor-button:hover,
+#imageEditor .tui-image-editor-submenu .tui-image-editor-button.active,
+#imageEditor .tui-image-editor-submenu .tui-image-editor-button.active label,
+#imageEditor .tui-image-editor-submenu .tui-image-editor-button:hover label {
+  color: var(--accent) !important;
+}
+
+#imageEditor .tui-image-editor-menu-filter .tui-image-editor-checkbox input + span::before {
+  background-color: #9ca4a8 !important;
+  background-image: none !important;
+}
+
+#imageEditor .tui-image-editor-menu-filter .tui-image-editor-checkbox input[type="checkbox"]:checked + span::before {
+  background-color: var(--accent) !important;
+  background-image: none !important;
+  content: "" !important;
+}
+
+#imageEditor .tui-image-editor-help-menu .tie-panel-history {
+  border: 1px solid #3c4245 !important;
+  background-color: #171a1d !important;
+  color: #b8c0c4 !important;
+}
+
+#imageEditor .tui-image-editor-help-menu .tie-panel-history .history-list .history-item {
+  color: #b8c0c4 !important;
+}
+
+#imageEditor .tui-image-editor-help-menu .tie-panel-history .history-list .history-item:hover,
+#imageEditor .tui-image-editor-help-menu .tie-panel-history .history-list .history-item.selected-item {
+  background-color: #2b3033 !important;
+  color: #f4f7f7 !important;
+}
+
+#imageEditor .tui-image-editor-help-menu .tie-panel-history .history-list .history-item.disabled-item {
+  color: #737c80 !important;
+}
+
+#imageEditor .tui-image-editor-help-menu .tie-panel-history .history-list .history-item svg,
+#imageEditor .tui-image-editor-help-menu .tie-panel-history .history-list .history-item svg use {
+  fill: #aeb7bb !important;
+  stroke: #aeb7bb !important;
+}
+
+#imageEditor .tui-image-editor-help-menu.right .opened .tie-panel-history::before {
+  border-left-color: #171a1d !important;
+}
+
+#imageEditor .tui-image-editor-help-menu .tie-panel-history .history-list {
+  scrollbar-color: #596166 #171a1d;
+}
+
+#imageEditor .tui-image-editor-canvas-container,
+#imageEditor .lower-canvas,
+#imageEditor .upper-canvas {
+  background-color: #000 !important;
+}
+
+#imageEditor .custom-main-tool > button {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #a9b1b5;
+}
+
+#imageEditor .custom-main-tool:hover > button,
+#imageEditor .custom-main-tool.active > button {
+  color: var(--accent);
+}
+
+#imageEditor .custom-main-tool span {
+  position: relative;
+  display: block;
+  width: 23px;
+  height: 23px;
+}
+
+#imageEditor .custom-selection-tool span {
+  border: 1.5px dashed currentColor;
+  border-radius: 2px;
+}
+
+#imageEditor .custom-eraser-tool span {
+  width: 21px;
+  height: 14px;
+  border: 1.5px solid currentColor;
+  border-radius: 2px 4px 4px 2px;
+  transform: rotate(-42deg);
+}
+
+#imageEditor .custom-eraser-tool span::after {
+  position: absolute;
+  right: 5px;
+  bottom: -5px;
+  width: 15px;
+  height: 1px;
+  background: currentColor;
+  content: "";
+  transform: rotate(42deg);
+}
+
+#imageEditor .custom-tool-panel {
+  position: absolute;
+  z-index: 30;
+  top: 0;
+  bottom: 0;
+  left: 64px;
+  display: none;
+  width: 248px;
+  padding: 150px 22px 24px;
+  overflow-y: auto;
+  border-right: 1px solid rgb(255 255 255 / 0.08);
+  background: #171a1d;
+}
+
+#imageEditor .custom-tool-panel.active {
+  display: block;
+}
+
+#imageEditor .custom-tool-panel h3 {
+  margin: 0 0 24px;
+  color: var(--accent);
+  font-size: 17px;
+}
+
+#imageEditor .custom-tool-choice-row,
+#imageEditor .custom-tool-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  margin-bottom: 18px;
+}
+
+#imageEditor .custom-tool-button {
+  min-height: 42px;
+  padding: 5px;
+  border: 1px solid #444b4f;
+  border-radius: 5px;
+  background: #111315;
+  color: #a9b1b5;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+#imageEditor .custom-tool-button:hover,
+#imageEditor .custom-tool-button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+#imageEditor .selection-rectangle::before,
+#imageEditor .selection-ellipse::before,
+#imageEditor .eraser-hard::before,
+#imageEditor .eraser-soft::before {
+  display: block;
+  width: 24px;
+  height: 18px;
+  margin: 0 auto 5px;
+  border: 1.5px dashed currentColor;
+  content: "";
+}
+
+#imageEditor .selection-ellipse::before,
+#imageEditor .eraser-hard::before,
+#imageEditor .eraser-soft::before {
+  border-radius: 50%;
+}
+
+#imageEditor .eraser-hard::before,
+#imageEditor .eraser-soft::before {
+  border-style: solid;
+  background: #a9b1b5;
+}
+
+#imageEditor .eraser-soft::before {
+  border: 0;
+  background: radial-gradient(circle, #a9b1b5 25%, transparent 72%);
+}
+
+#imageEditor .custom-tool-panel .custom-range-control {
+  width: 100%;
+  margin-top: 20px;
+}
+
+#imageEditor .custom-style-options {
+  display: grid;
+  gap: 20px;
+  width: 244px;
+  margin-top: 18px;
+  margin-left: 4px !important;
+}
+
+#imageEditor .custom-style-colors {
+  display: flex;
+  justify-content: center;
+  gap: 34px;
+}
+
+#imageEditor .custom-color-option {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  color: #f4f7f7;
+  font-size: 11px;
+}
+
+#imageEditor .custom-color-option input {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #5a6266;
+  border-radius: 50%;
+  background: transparent;
+}
+
+#imageEditor .custom-color-option input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+#imageEditor .custom-color-option input::-webkit-color-swatch {
+  border: 0;
+  border-radius: 50%;
+}
+
+#imageEditor .custom-color-option.is-disabled,
+#imageEditor .custom-range-control.is-disabled {
+  pointer-events: none;
+  opacity: 0.28;
+}
+
+#imageEditor .custom-icon-library {
+  display: grid;
+  grid-template-columns: repeat(3, 52px);
+  gap: 12px;
+  justify-content: center;
+  width: 244px;
+  margin-top: 20px;
+  margin-left: 4px !important;
+  padding-top: 18px;
+  border-top: 1px solid #3c3c3c;
+}
+
+#imageEditor .custom-icon-button {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border: 1px solid #42494d;
+  border-radius: 5px;
+  background: #111315;
+  color: #a9b1b5;
+}
+
+#imageEditor .custom-icon-button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+#imageEditor .custom-icon-button svg {
+  width: 30px;
+  height: 30px;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}

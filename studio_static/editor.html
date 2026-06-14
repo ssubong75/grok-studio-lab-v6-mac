@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Grok Studio Image Editor</title>
+    <link rel="stylesheet" href="/assets/vendor/tui-image-editor/tui-color-picker.min.css" />
+    <link rel="stylesheet" href="/assets/vendor/tui-image-editor/tui-image-editor.min.css" />
+    <link rel="stylesheet" href="/assets/editor.css?v=lab-v6-20260615-01" />
+  </head>
+  <body>
+    <header class="editor-toolbar">
+      <div class="editor-title">
+        <strong>Image Editor</strong>
+      </div>
+      <div class="editor-actions">
+        <span id="editorStatus" role="status"></span>
+        <button id="closeEditorBtn" class="secondary-button" type="button">Close</button>
+        <button id="saveEditorBtn" class="save-button" type="button">Save</button>
+      </div>
+    </header>
+    <main id="imageEditor"></main>
+    <div id="editorOptionTemplates" hidden>
+      <label class="font-control">
+        <span>Font</span>
+        <select id="fontSelect" aria-label="System font">
+          <option value="">Select text first</option>
+        </select>
+      </label>
+      <div class="feather-control">
+        <span class="feather-label">Feather</span>
+        <span class="feather-inputs">
+          <input id="featherRange" type="range" min="0" max="100" step="1" value="0" aria-label="Feather" disabled />
+          <input id="featherValue" type="number" min="0" max="100" step="1" value="0" aria-label="Feather value" disabled />
+        </span>
+      </div>
+      <div class="crop-ratios" aria-label="Crop ratios">
+        <button type="button" data-ratio="original">Original</button>
+        <button type="button" data-ratio="custom">Custom</button>
+        <button type="button" data-ratio="1">1:1</button>
+        <button type="button" data-ratio="0.6666666667">2:3</button>
+        <button type="button" data-ratio="1.5">3:2</button>
+        <button type="button" data-ratio="0.75">3:4</button>
+        <button type="button" data-ratio="1.3333333333">4:3</button>
+        <button type="button" data-ratio="0.5625">9:16</button>
+        <button type="button" data-ratio="1.7777777778">16:9</button>
+      </div>
+    </div>
+
+    <script src="/assets/vendor/tui-image-editor/tui-color-picker.min.js"></script>
+    <script src="/assets/vendor/tui-image-editor/tui-image-editor.min.js"></script>
+    <script src="/assets/editor.js?v=lab-v6-20260615-01"></script>
+  </body>
+</html>
