@@ -287,13 +287,16 @@ function reportClientEvent(event, detail = {}) {
   }).catch(() => {});
 }
 
-async function loadState() {
+async function loadState(options = {}) {
   const data = await api("/api/state");
   state.items = data.items || [];
   state.categories = data.categories || [];
   state.galleryFolders = data.gallery_folders || [];
   state.gallerySavedSort = data.gallery_sort || "";
-  if (state.view !== "folder-gallery") state.gallerySort = state.gallerySavedSort;
+  if (options.resetGallerySort || state.view !== "folder-gallery") {
+    state.gallerySort = state.gallerySavedSort;
+    state.galleryDraftLayout = null;
+  }
   state.jobs = data.jobs || [];
   state.uploads = data.uploads || [];
   state.auth = data.auth || null;
@@ -3148,7 +3151,7 @@ async function setLibraryFolder() {
   });
   if (data.cancelled) return;
   state.library = data.library || data.state?.library || state.library;
-  await loadState();
+  await loadState({ resetGallerySort: true });
   toast("Library folder updated.");
 }
 
