@@ -47,12 +47,15 @@ let eraserOpacity = 100;
 let pendingIconKind = "fill";
 let pendingIconName = "";
 let selectedIconId = null;
+let editorUserChoseMenu = false;
 const customPanels = {};
 const customIconPaths = {
   bubbleTailCenter: "M2.25 12.76c0 1.6 1.123 2.994 2.707 3.227 1.068.157 2.148.279 3.238.364.466.037.893.281 1.153.671L12 21l2.652-3.978c.26-.39.687-.634 1.153-.67 1.09-.086 2.17-.208 3.238-.365 1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z",
   bubbleTailLeft: "M2.25 12.76c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 0 1 1.037-.443 48.282 48.282 0 0 0 5.68-.494c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z",
   bubbleRound: "M12 20.25c4.97 0 9-3.694 9-8.25s-4.03-8.25-9-8.25S3 7.444 3 12c0 2.104.859 4.023 2.273 5.48.432.447.74 1.04.586 1.641a4.483 4.483 0 0 1-.923 1.785A5.969 5.969 0 0 0 6 21c1.282 0 2.47-.402 3.445-1.087.81.22 1.668.337 2.555.337Z",
 };
+const builtInMenus = ["crop", "draw", "shape", "icon", "text", "filter"];
+const customMenus = ["selection", "transform", "eraser"];
 const opacityControls = new Map();
 const objectOpacityMenus = new Map();
 const opacityValues = {
@@ -361,6 +364,31 @@ function bindWheelRangeControls() {
   }, { passive: false });
 }
 
+function editorFitSize() {
+  return {
+    width: Math.max(420, window.innerWidth - 560),
+    height: Math.max(500, window.innerHeight - 170),
+  };
+}
+
+function refreshEditorFit() {
+  const graphics = imageEditor?._graphics;
+  if (!graphics?.setCssMaxDimension || !graphics?.adjustCanvasDimension) return;
+  try {
+    graphics.setCssMaxDimension(editorFitSize());
+    graphics.adjustCanvasDimension();
+  } catch (error) {
+    // TUI may still be settling while the image loads; the next scheduled pass will retry.
+  }
+}
+
+function scheduleEditorLayoutRefresh(delay = 0) {
+  window.setTimeout(() => {
+    refreshEditorFit();
+    updateActiveSubmenuLayout();
+  }, delay);
+}
+
 function editorCanvas() {
   return imageEditor?._graphics?.getCanvas?.() || null;
 }
@@ -433,6 +461,12 @@ function makeToolPanel(name) {
   return list;
 }
 
+function makeOptionDivider() {
+  const divider = document.createElement("div");
+  divider.className = "custom-option-divider";
+  return divider;
+}
+
 function hideCustomPanels() {
   Object.values(customPanels).forEach((panel) => panel.classList.remove("active"));
   document.querySelectorAll(".custom-main-tool").forEach((button) => button.classList.remove("active"));
@@ -440,7 +474,7 @@ function hideCustomPanels() {
 
 function clearCustomMenuState() {
   const main = document.querySelector(".tui-image-editor-main");
-  ["selection", "transform", "eraser"].forEach((name) => {
+  customMenus.forEach((name) => {
     main?.classList.remove(`tui-image-editor-menu-${name}`);
   });
   hideCustomPanels();
@@ -453,7 +487,7 @@ function showCustomPanel(name) {
   main?.classList.add(`tui-image-editor-menu-${name}`);
   customPanels[name]?.classList.add("active");
   document.querySelector(`[data-custom-tool="${name}"]`)?.classList.add("active");
-  window.requestAnimationFrame(updateActiveSubmenuLayout);
+  scheduleEditorLayoutRefresh();
 }
 
 function addCustomMainTool(name, label, iconClass, position = "last") {
@@ -517,7 +551,7 @@ function updateActiveSubmenuLayout() {
   const titleRect = title.getBoundingClientRect();
   if (!panelRect.height || !listRect.height || !titleRect.height) return;
   const listTop = (panelRect.height - listRect.height) / 2;
-  const titleGap = titleRect.height * 4;
+  const titleGap = titleRect.height * 2;
   title.style.top = `${Math.max(8, Math.round(listTop - titleGap - titleRect.height))}px`;
 }
 
@@ -537,6 +571,27 @@ function clearBuiltInMenuState() {
   main?.classList.forEach((className) => {
     if (className.startsWith("tui-image-editor-menu-")) main.classList.remove(className);
   });
+}
+
+function activeMenuName() {
+  const main = document.querySelector(".tui-image-editor-main");
+  const activeClass = Array.from(main?.classList || [])
+    .find((className) => className.startsWith("tui-image-editor-menu-"));
+  return activeClass ? activeClass.replace("tui-image-editor-menu-", "") : "";
+}
+
+function builtInMenuNameFromButton(button) {
+  return builtInMenus.find((menuName) => button.classList.contains(`tie-btn-${menuName}`)) || "";
+}
+
+function keepMenuOpen(menuName) {
+  const main = document.querySelector(".tui-image-editor-main");
+  const button = document.querySelector(`.tie-btn-${menuName}`);
+  if (!main || !button) return;
+  customMenus.forEach((name) => main.classList.remove(`tui-image-editor-menu-${name}`));
+  main.classList.add(`tui-image-editor-menu-${menuName}`);
+  button.classList.add("active");
+  scheduleEditorLayoutRefresh();
 }
 
 function resetEditorInteraction(options = {}) {
@@ -560,8 +615,56 @@ function resetEditorInteraction(options = {}) {
 
 function setSelectionShape(shape) {
   selectionShape = shape === "ellipse" ? "ellipse" : "rect";
-  document.querySelector(".selection-rectangle")?.classList.toggle("active", selectionShape === "rect");
-  document.querySelector(".selection-ellipse")?.classList.toggle("active", selectionShape === "ellipse");
+  document.querySelectorAll(".selection-rectangle").forEach((button) => {
+    button.classList.toggle("active", selectionShape === "rect");
+  });
+  document.querySelectorAll(".selection-ellipse").forEach((button) => {
+    button.classList.toggle("active", selectionShape === "ellipse");
+  });
+}
+
+function enableSelectionDrawing(shape = selectionShape) {
+  const canvas = editorCanvas();
+  if (!canvas) return;
+  resetEditorInteraction({ keepSelectionGuide: true });
+  selectionMode = "select";
+  setSelectionShape(shape);
+  canvas.discardActiveObject();
+  canvas.selection = false;
+  canvas.defaultCursor = "crosshair";
+  canvas.getObjects().forEach((object) => {
+    if (!object.grokSelectionGuide) object.evented = false;
+  });
+  canvas.requestRenderAll();
+}
+
+function makeSelectionShapeButton(shape) {
+  const isEllipse = shape === "ellipse";
+  const button = makeActionButton(isEllipse ? "Ellipse" : "Rectangle", () => {
+    enableSelectionDrawing(isEllipse ? "ellipse" : "rect");
+  }, isEllipse ? "selection-ellipse" : "selection-rectangle");
+  button.textContent = "";
+  button.setAttribute("aria-label", isEllipse ? "Ellipse selection" : "Rectangle selection");
+  if ((!isEllipse && selectionShape === "rect") || (isEllipse && selectionShape === "ellipse")) {
+    button.classList.add("active");
+  }
+  return button;
+}
+
+function makeSelectionShapeRow() {
+  const shapes = document.createElement("div");
+  shapes.className = "custom-tool-choice-row custom-selection-shape-row";
+  shapes.append(makeSelectionShapeButton("rect"), makeSelectionShapeButton("ellipse"));
+  return shapes;
+}
+
+function installFilterSelectionOptions() {
+  const list = document.querySelector(".tui-image-editor-menu-filter .tui-image-editor-submenu-item");
+  if (!list || list.querySelector(".custom-filter-selection-options")) return;
+  const host = document.createElement("li");
+  host.className = "custom-filter-selection-options tui-image-editor-newline";
+  host.append(makeSelectionShapeRow(), makeOptionDivider());
+  list.insertBefore(host, list.firstElementChild);
 }
 
 function createStylePanel(menuName, options = {}) {
@@ -828,13 +931,25 @@ function updateInverseSelectionGuide() {
 function activateSelectionTool() {
   const canvas = editorCanvas();
   if (!canvas) return;
-  resetEditorInteraction({ keepSelectionGuide: true });
-  selectionMode = "select";
+  enableSelectionDrawing(selectionShape);
   showCustomPanel("selection");
-  canvas.discardActiveObject();
-  canvas.selection = false;
-  canvas.defaultCursor = "crosshair";
-  canvas.requestRenderAll();
+}
+
+function activateInitialSelection(attempt = 0) {
+  if (editorUserChoseMenu) return;
+  const button = document.querySelector('[data-custom-tool="selection"] button');
+  if (editorCanvas() && button) {
+    button.click();
+    scheduleEditorLayoutRefresh(120);
+    scheduleEditorLayoutRefresh(320);
+    if (attempt < 10) {
+      window.setTimeout(() => activateInitialSelection(attempt + 1), 220);
+    }
+    return;
+  }
+  if (attempt < 60) {
+    window.setTimeout(() => activateInitialSelection(attempt + 1), 100);
+  }
 }
 
 function activateTransformTool() {
@@ -1173,21 +1288,12 @@ function makeFlipActionButton(axis, onClick) {
 function installSelectionTool() {
   const button = addCustomMainTool("selection", "Selection", "custom-selection-tool", "first");
   const panel = makeToolPanel("selection");
-  const shapes = document.createElement("div");
+  const shapes = makeSelectionShapeRow();
   const actions = document.createElement("div");
-  shapes.className = "custom-tool-choice-row";
   actions.className = "custom-tool-action-grid";
-  const rect = makeActionButton("Rectangle", () => {
-    setSelectionShape("rect");
-  }, "selection-rectangle active");
-  rect.textContent = "";
-  rect.setAttribute("aria-label", "Rectangle selection");
-  const circle = makeActionButton("Ellipse", () => {
-    setSelectionShape("ellipse");
-  }, "selection-ellipse");
-  circle.textContent = "";
-  circle.setAttribute("aria-label", "Ellipse selection");
-  shapes.append(rect, circle);
+  const feather = makeCustomRange("Feather", 0, 100, 0, (value) => {
+    selectionFeather = value;
+  });
   actions.append(
     makeActionButton("Inverse", () => {
       selectionInverse = !selectionInverse;
@@ -1195,11 +1301,9 @@ function installSelectionTool() {
       setStatus(selectionInverse ? "Inverse selection enabled." : "Inverse selection disabled.");
     }),
   );
-  const feather = makeCustomRange("Feather", 0, 100, 0, (value) => {
-    selectionFeather = value;
-  });
-  panel.append(shapes, actions, feather.control);
-  button?.addEventListener("click", () => {
+  panel.append(shapes, feather.control, actions);
+  button?.addEventListener("click", (event) => {
+    if (event.isTrusted) editorUserChoseMenu = true;
     activateSelectionTool();
   });
   const canvas = editorCanvas();
@@ -1241,6 +1345,7 @@ function installSelectionTool() {
 function installTransformTool() {
   const button = addCustomMainTool("transform", "Transform", "custom-transform-tool", "after-crop");
   const panel = makeToolPanel("transform");
+  const shapes = makeSelectionShapeRow();
   const flips = document.createElement("div");
   const rotations = document.createElement("div");
   flips.className = "custom-tool-action-grid";
@@ -1255,8 +1360,11 @@ function installTransformTool() {
   );
   const angle = makeCustomRange("Angle", -360, 360, 0, applyTransformAngle);
   angle.control.classList.add("transform-angle-control");
-  panel.append(flips, rotations, angle.control);
-  button?.addEventListener("click", () => activateTransformTool());
+  panel.append(shapes, makeOptionDivider(), flips, rotations, angle.control);
+  button?.addEventListener("click", (event) => {
+    if (event.isTrusted) editorUserChoseMenu = true;
+    activateTransformTool();
+  });
 }
 
 function applyEraserBrush() {
@@ -1307,7 +1415,8 @@ function installEraserTool() {
     applyEraserBrush();
   });
   panel.append(brushes, size.control, opacity.control);
-  button?.addEventListener("click", () => {
+  button?.addEventListener("click", (event) => {
+    if (event.isTrusted) editorUserChoseMenu = true;
     activateEraserTool();
   });
   editorCanvas().on("path:created", (event) => {
@@ -1555,10 +1664,18 @@ function bindEditorEvents() {
 
 function bindBuiltInMenuReset() {
   document.querySelectorAll(".tui-image-editor-menu > .tui-image-editor-item:not(.custom-main-tool)").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", (event) => {
+      if (event.isTrusted) editorUserChoseMenu = true;
+      const menuName = builtInMenuNameFromButton(button);
+      if (menuName && activeMenuName() === menuName && button.classList.contains("active")) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        keepMenuOpen(menuName);
+        return;
+      }
       clearCustomMenuState();
       resetEditorInteraction({ keepSelectionGuide: button.classList.contains("tie-btn-filter") });
-      window.setTimeout(updateActiveSubmenuLayout, 0);
+      scheduleEditorLayoutRefresh();
     }, true);
   });
 }
@@ -1626,11 +1743,12 @@ function init() {
       uiSize: { width: "100%", height: "100%" },
       menuBarPosition: "left",
     },
-    cssMaxWidth: Math.max(420, window.innerWidth - 560),
-    cssMaxHeight: Math.max(500, window.innerHeight - 170),
+    cssMaxWidth: editorFitSize().width,
+    cssMaxHeight: editorFitSize().height,
     usageStatistics: false,
   });
   installCustomOptionPanels();
+  installFilterSelectionOptions();
   normalizeEditorLabels();
   installIconAndTextStyles();
   installCustomIcons();
@@ -1648,13 +1766,16 @@ function init() {
   bindSelectionFilterProxy();
   setFeatherControl();
   loadSystemFonts();
-  activateSelectionTool();
+  activateInitialSelection();
   window.setTimeout(() => {
     const canvasSize = imageEditor.getCanvasSize();
     if (canvasSize.width && canvasSize.height) originalAspect = canvasSize.width / canvasSize.height;
-    updateActiveSubmenuLayout();
+    scheduleEditorLayoutRefresh();
   }, 250);
-  window.addEventListener("resize", () => window.requestAnimationFrame(updateActiveSubmenuLayout));
+  window.addEventListener("resize", () => window.requestAnimationFrame(() => {
+    refreshEditorFit();
+    updateActiveSubmenuLayout();
+  }));
 }
 
 init();

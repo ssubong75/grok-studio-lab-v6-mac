@@ -646,6 +646,24 @@ button {
   margin-bottom: 18px;
 }
 
+#imageEditor .custom-filter-selection-options {
+  display: block !important;
+  width: 100%;
+  margin: 0 !important;
+  padding: 0 22px 14px;
+}
+
+#imageEditor .custom-filter-selection-options .custom-tool-choice-row {
+  margin-bottom: 14px;
+}
+
+#imageEditor .custom-option-divider {
+  width: 100%;
+  height: 1px;
+  margin: 4px auto 18px;
+  background: rgb(255 255 255 / 0.16);
+}
+
 #imageEditor .custom-tool-action-grid .custom-tool-button:only-child {
   grid-column: 1 / -1;
   width: 50%;
