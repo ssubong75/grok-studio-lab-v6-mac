@@ -39,6 +39,7 @@ let selectionInverseGuide = null;
 let selectionFilterBaseline = null;
 let pixelClipboard = null;
 let movedSelectionId = null;
+let transformAngle = 0;
 let eraserMode = false;
 let eraserSoft = false;
 let eraserSize = 28;
@@ -336,6 +337,9 @@ function adjustVirtualRange(range, direction) {
 function bindWheelRangeControls() {
   const allowedMenus = [
     ".tui-image-editor-menu-rotate",
+    ".tui-image-editor-menu-transform",
+    ".tui-image-editor-menu-selection",
+    ".tui-image-editor-menu-eraser",
     ".tui-image-editor-menu-draw",
     ".tui-image-editor-menu-shape",
     ".tui-image-editor-menu-icon",
@@ -414,14 +418,19 @@ function setOptionDisabled(option, disabled) {
   option.input.disabled = disabled;
 }
 
-function makeToolPanel(name, title) {
-  const panel = document.createElement("section");
-  panel.className = `custom-tool-panel custom-tool-panel-${name}`;
+function makeToolPanel(name) {
+  const submenu = document.querySelector(".tui-image-editor-submenu");
+  if (!submenu) return document.createElement("ul");
+  const panel = document.createElement("div");
+  const list = document.createElement("ul");
+  panel.className = `tui-image-editor-menu-${name} custom-tool-panel custom-tool-panel-${name}`;
   panel.dataset.toolPanel = name;
-  panel.innerHTML = `<h3>${title}</h3>`;
-  els.editor.appendChild(panel);
+  list.className = "tui-image-editor-submenu-item custom-tool-options";
+  panel.appendChild(list);
+  const style = submenu.querySelector(".tui-image-editor-submenu-style");
+  submenu.insertBefore(panel, style || null);
   customPanels[name] = panel;
-  return panel;
+  return list;
 }
 
 function hideCustomPanels() {
@@ -429,11 +438,22 @@ function hideCustomPanels() {
   document.querySelectorAll(".custom-main-tool").forEach((button) => button.classList.remove("active"));
 }
 
+function clearCustomMenuState() {
+  const main = document.querySelector(".tui-image-editor-main");
+  ["selection", "transform", "eraser"].forEach((name) => {
+    main?.classList.remove(`tui-image-editor-menu-${name}`);
+  });
+  hideCustomPanels();
+}
+
 function showCustomPanel(name) {
   clearBuiltInMenuState();
   hideCustomPanels();
+  const main = document.querySelector(".tui-image-editor-main");
+  main?.classList.add(`tui-image-editor-menu-${name}`);
   customPanels[name]?.classList.add("active");
   document.querySelector(`[data-custom-tool="${name}"]`)?.classList.add("active");
+  window.requestAnimationFrame(updateActiveSubmenuLayout);
 }
 
 function addCustomMainTool(name, label, iconClass, position = "last") {
@@ -446,9 +466,14 @@ function addCustomMainTool(name, label, iconClass, position = "last") {
   button.innerHTML = `<button type="button" aria-label="${label}"><span aria-hidden="true"></span></button>`;
   if (position === "first") {
     menu.insertBefore(button, menu.firstElementChild);
+  } else if (position === "after-crop") {
+    const crop = menu.querySelector(".tie-btn-crop");
+    if (crop) crop.after(button);
+    else menu.appendChild(button);
   } else if (position === "after-draw") {
     const draw = menu.querySelector(".tie-btn-draw");
-    draw?.after(button);
+    if (draw) draw.after(button);
+    else menu.appendChild(button);
   } else {
     menu.appendChild(button);
   }
@@ -457,9 +482,11 @@ function addCustomMainTool(name, label, iconClass, position = "last") {
 
 function installSubmenuTitles() {
   const labels = {
+    selection: "Selection",
     crop: "Crop",
-    rotate: "Rotate",
+    transform: "Transform",
     draw: "Draw",
+    eraser: "Eraser",
     shape: "Shape",
     icon: "Icon",
     text: "Text",
@@ -475,8 +502,27 @@ function installSubmenuTitles() {
   });
 }
 
+function updateActiveSubmenuLayout() {
+  const main = document.querySelector(".tui-image-editor-main");
+  const activeClass = Array.from(main?.classList || [])
+    .find((className) => className.startsWith("tui-image-editor-menu-"));
+  if (!activeClass) return;
+  const menuName = activeClass.replace("tui-image-editor-menu-", "");
+  const panel = document.querySelector(`.tui-image-editor-submenu > .tui-image-editor-menu-${menuName}`);
+  const title = panel?.querySelector(".custom-submenu-title");
+  const list = panel?.querySelector(".tui-image-editor-submenu-item");
+  if (!panel || !title || !list) return;
+  const panelRect = panel.getBoundingClientRect();
+  const listRect = list.getBoundingClientRect();
+  const titleRect = title.getBoundingClientRect();
+  if (!panelRect.height || !listRect.height || !titleRect.height) return;
+  const listTop = (panelRect.height - listRect.height) / 2;
+  const titleGap = titleRect.height * 4;
+  title.style.top = `${Math.max(8, Math.round(listTop - titleGap - titleRect.height))}px`;
+}
+
 function activateBuiltInMenu(menuName) {
-  hideCustomPanels();
+  clearCustomMenuState();
   selectionMode = "";
   eraserMode = false;
   const menu = document.querySelector(`.tie-btn-${menuName}`);
@@ -510,6 +556,12 @@ function resetEditorInteraction(options = {}) {
     });
     canvas.requestRenderAll();
   }
+}
+
+function setSelectionShape(shape) {
+  selectionShape = shape === "ellipse" ? "ellipse" : "rect";
+  document.querySelector(".selection-rectangle")?.classList.toggle("active", selectionShape === "rect");
+  document.querySelector(".selection-ellipse")?.classList.toggle("active", selectionShape === "ellipse");
 }
 
 function createStylePanel(menuName, options = {}) {
@@ -775,12 +827,23 @@ function updateInverseSelectionGuide() {
 
 function activateSelectionTool() {
   const canvas = editorCanvas();
+  if (!canvas) return;
   resetEditorInteraction({ keepSelectionGuide: true });
   selectionMode = "select";
   showCustomPanel("selection");
   canvas.discardActiveObject();
   canvas.selection = false;
   canvas.defaultCursor = "crosshair";
+  canvas.requestRenderAll();
+}
+
+function activateTransformTool() {
+  const canvas = editorCanvas();
+  resetEditorInteraction({ keepSelectionGuide: true });
+  showCustomPanel("transform");
+  if (!canvas) return;
+  canvas.selection = true;
+  canvas.defaultCursor = "default";
   canvas.requestRenderAll();
 }
 
@@ -791,14 +854,14 @@ function activateEraserTool() {
   applyEraserBrush();
 }
 
-function selectFullImage() {
+function selectFullImage(options = {}) {
+  const previousMode = selectionMode;
   resetSelectionFilterBaseline();
-  selectionShape = "rect";
-  document.querySelector(".selection-rectangle")?.classList.add("active");
-  document.querySelector(".selection-ellipse")?.classList.remove("active");
-  activateSelectionTool();
+  setSelectionShape("rect");
+  if (!options.preserveMenu) activateSelectionTool();
   const size = imageEditor.getCanvasSize();
   createSelectionGuide({ left: 0, top: 0, width: size.width, height: size.height, shape: "rect" });
+  if (options.preserveMenu) selectionMode = previousMode;
   setStatus("All selected.");
 }
 
@@ -1055,11 +1118,40 @@ async function transformSelection() {
   setStatus("Free Transform ready.");
 }
 
+async function flipSelectionOrImage(axis) {
+  if (selectionGuide) {
+    await flipMovedSelection(axis);
+    return;
+  }
+  if (axis === "x") {
+    await imageEditor.flipX();
+  } else {
+    await imageEditor.flipY();
+  }
+}
+
 async function flipMovedSelection(axis) {
   if (!movedSelectionId) await transformSelection();
   const prop = axis === "x" ? "flipX" : "flipY";
   const current = imageEditor.getObjectProperties(movedSelectionId, prop)?.[prop];
   imageEditor.setObjectPropertiesQuietly(movedSelectionId, { [prop]: !current });
+}
+
+function applyTransformAngle(value) {
+  transformAngle = Number(value) || 0;
+  imageEditor.setAngle(transformAngle).catch((error) => setStatus(error.message, "error"));
+}
+
+function rotateTransform(delta) {
+  transformAngle = Math.max(-360, Math.min(360, transformAngle + delta));
+  imageEditor.rotate(delta).catch((error) => setStatus(error.message, "error"));
+  const range = document.querySelector(".transform-angle-control input[type='range']");
+  const number = document.querySelector(".transform-angle-control input[type='number']");
+  if (range && number) {
+    range.value = String(transformAngle);
+    number.value = String(transformAngle);
+    syncNativeRangeFill(range);
+  }
 }
 
 function makeActionButton(label, onClick, className = "") {
@@ -1080,24 +1172,18 @@ function makeFlipActionButton(axis, onClick) {
 
 function installSelectionTool() {
   const button = addCustomMainTool("selection", "Selection", "custom-selection-tool", "first");
-  const panel = makeToolPanel("selection", "Selection");
+  const panel = makeToolPanel("selection");
   const shapes = document.createElement("div");
   const actions = document.createElement("div");
-  const transforms = document.createElement("div");
   shapes.className = "custom-tool-choice-row";
   actions.className = "custom-tool-action-grid";
-  transforms.className = "custom-tool-action-grid";
   const rect = makeActionButton("Rectangle", () => {
-    selectionShape = "rect";
-    rect.classList.add("active");
-    circle.classList.remove("active");
+    setSelectionShape("rect");
   }, "selection-rectangle active");
   rect.textContent = "";
   rect.setAttribute("aria-label", "Rectangle selection");
   const circle = makeActionButton("Ellipse", () => {
-    selectionShape = "ellipse";
-    circle.classList.add("active");
-    rect.classList.remove("active");
+    setSelectionShape("ellipse");
   }, "selection-ellipse");
   circle.textContent = "";
   circle.setAttribute("aria-label", "Ellipse selection");
@@ -1108,16 +1194,11 @@ function installSelectionTool() {
       updateInverseSelectionGuide();
       setStatus(selectionInverse ? "Inverse selection enabled." : "Inverse selection disabled.");
     }),
-    makeActionButton("Transform", transformSelection),
-  );
-  transforms.append(
-    makeFlipActionButton("x", () => flipMovedSelection("x")),
-    makeFlipActionButton("y", () => flipMovedSelection("y")),
   );
   const feather = makeCustomRange("Feather", 0, 100, 0, (value) => {
     selectionFeather = value;
   });
-  panel.append(shapes, actions, transforms, feather.control);
+  panel.append(shapes, actions, feather.control);
   button?.addEventListener("click", () => {
     activateSelectionTool();
   });
@@ -1157,6 +1238,27 @@ function installSelectionTool() {
   });
 }
 
+function installTransformTool() {
+  const button = addCustomMainTool("transform", "Transform", "custom-transform-tool", "after-crop");
+  const panel = makeToolPanel("transform");
+  const flips = document.createElement("div");
+  const rotations = document.createElement("div");
+  flips.className = "custom-tool-action-grid";
+  rotations.className = "custom-tool-action-grid";
+  flips.append(
+    makeFlipActionButton("x", () => flipSelectionOrImage("x")),
+    makeFlipActionButton("y", () => flipSelectionOrImage("y")),
+  );
+  rotations.append(
+    makeActionButton("Rotate -90", () => rotateTransform(-90), "custom-rotate-button"),
+    makeActionButton("Rotate +90", () => rotateTransform(90), "custom-rotate-button"),
+  );
+  const angle = makeCustomRange("Angle", -360, 360, 0, applyTransformAngle);
+  angle.control.classList.add("transform-angle-control");
+  panel.append(flips, rotations, angle.control);
+  button?.addEventListener("click", () => activateTransformTool());
+}
+
 function applyEraserBrush() {
   const canvas = editorCanvas();
   if (!canvas) return;
@@ -1176,7 +1278,7 @@ function applyEraserBrush() {
 
 function installEraserTool() {
   const button = addCustomMainTool("eraser", "Eraser", "custom-eraser-tool", "after-draw");
-  const panel = makeToolPanel("eraser", "Eraser");
+  const panel = makeToolPanel("eraser");
   const brushes = document.createElement("div");
   brushes.className = "custom-tool-choice-row";
   const hard = makeActionButton("Hard", () => {
@@ -1229,6 +1331,23 @@ function bindEditorShortcuts() {
       || event.target?.isContentEditable) return;
     const command = event.metaKey || event.ctrlKey;
     const key = event.key.toLowerCase();
+    const cropActive = document.querySelector(".tui-image-editor-main")?.classList.contains("tui-image-editor-menu-crop");
+    if (!command && key === "enter" && cropActive) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      clickCropAction("apply");
+      return;
+    }
+    if (!command && key === "escape") {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (cropActive) {
+        clickCropAction("cancel");
+      } else if (selectionGuide) {
+        removeSelectionGuide();
+      }
+      return;
+    }
     if (command && key === "z") {
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -1238,7 +1357,7 @@ function bindEditorShortcuts() {
     if (command && key === "a") {
       event.preventDefault();
       event.stopImmediatePropagation();
-      selectFullImage();
+      selectFullImage({ preserveMenu: true });
       return;
     }
     if (!command && key === "m") {
@@ -1283,6 +1402,16 @@ function bindEditorShortcuts() {
       replaceWithDeletedSelection().catch((error) => setStatus(error.message, "error"));
     }
   }, true);
+}
+
+function clickCropAction(action) {
+  const selectors = [
+    `.tie-crop-button .tui-image-editor-button.${action}`,
+    `.tie-crop-button.${action} .tui-image-editor-button`,
+    `.tie-crop-button .${action}`,
+  ];
+  const button = selectors.map((selector) => document.querySelector(selector)).find(Boolean);
+  button?.click();
 }
 
 function bindWheelZoom() {
@@ -1427,8 +1556,9 @@ function bindEditorEvents() {
 function bindBuiltInMenuReset() {
   document.querySelectorAll(".tui-image-editor-menu > .tui-image-editor-item:not(.custom-main-tool)").forEach((button) => {
     button.addEventListener("click", () => {
-      hideCustomPanels();
+      clearCustomMenuState();
       resetEditorInteraction({ keepSelectionGuide: button.classList.contains("tie-btn-filter") });
+      window.setTimeout(updateActiveSubmenuLayout, 0);
     }, true);
   });
 }
@@ -1491,23 +1621,24 @@ function init() {
     includeUI: {
       loadImage: { path: sourceUrl, name: imageName },
       theme: blackTheme(),
-      menu: ["crop", "flip", "rotate", "draw", "shape", "icon", "text", "filter"],
+      menu: ["crop", "draw", "shape", "icon", "text", "filter"],
       initMenu: "",
       uiSize: { width: "100%", height: "100%" },
       menuBarPosition: "left",
     },
-    cssMaxWidth: Math.max(600, window.innerWidth - 300),
+    cssMaxWidth: Math.max(420, window.innerWidth - 560),
     cssMaxHeight: Math.max(500, window.innerHeight - 170),
     usageStatistics: false,
   });
   installCustomOptionPanels();
   normalizeEditorLabels();
-  installSubmenuTitles();
   installIconAndTextStyles();
   installCustomIcons();
   installHandTool();
   installSelectionTool();
+  installTransformTool();
   installEraserTool();
+  installSubmenuTitles();
   bindEditorEvents();
   bindBuiltInMenuReset();
   bindEditorShortcuts();
@@ -1517,10 +1648,13 @@ function init() {
   bindSelectionFilterProxy();
   setFeatherControl();
   loadSystemFonts();
+  activateSelectionTool();
   window.setTimeout(() => {
     const canvasSize = imageEditor.getCanvasSize();
     if (canvasSize.width && canvasSize.height) originalAspect = canvasSize.width / canvasSize.height;
+    updateActiveSubmenuLayout();
   }, 250);
+  window.addEventListener("resize", () => window.requestAnimationFrame(updateActiveSubmenuLayout));
 }
 
 init();
