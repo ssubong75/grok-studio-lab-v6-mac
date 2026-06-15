@@ -35,6 +35,8 @@ let selectionInverse = false;
 let selectionFeather = 0;
 let selectionStart = null;
 let selectionGuide = null;
+let selectionInverseGuide = null;
+let selectionFilterBaseline = null;
 let pixelClipboard = null;
 let movedSelectionId = null;
 let eraserMode = false;
@@ -217,6 +219,10 @@ function applyFeather(rawValue) {
   els.featherValue.value = String(value);
   syncNativeRangeFill(els.featherRange);
   imageEditor.setObjectPropertiesQuietly(selectedShapeId, { rx: value, ry: value });
+}
+
+function resetSelectionFilterBaseline() {
+  selectionFilterBaseline = null;
 }
 
 function activeOpacityMenu() {
@@ -424,6 +430,7 @@ function hideCustomPanels() {
 }
 
 function showCustomPanel(name) {
+  clearBuiltInMenuState();
   hideCustomPanels();
   customPanels[name]?.classList.add("active");
   document.querySelector(`[data-custom-tool="${name}"]`)?.classList.add("active");
@@ -451,7 +458,6 @@ function addCustomMainTool(name, label, iconClass, position = "last") {
 function installSubmenuTitles() {
   const labels = {
     crop: "Crop",
-    flip: "Flip",
     rotate: "Rotate",
     draw: "Draw",
     shape: "Shape",
@@ -477,22 +483,70 @@ function activateBuiltInMenu(menuName) {
   menu?.click();
 }
 
+function clearBuiltInMenuState() {
+  document.querySelectorAll(".tui-image-editor-menu > .tui-image-editor-item:not(.custom-main-tool)").forEach((item) => {
+    item.classList.remove("active");
+  });
+  const main = document.querySelector(".tui-image-editor-main");
+  main?.classList.forEach((className) => {
+    if (className.startsWith("tui-image-editor-menu-")) main.classList.remove(className);
+  });
+}
+
+function resetEditorInteraction(options = {}) {
+  const canvas = editorCanvas();
+  handMode = false;
+  handDragging = false;
+  handLastPoint = null;
+  selectionMode = "";
+  eraserMode = false;
+  imageEditor?.stopDrawingMode?.();
+  if (!options.keepSelectionGuide) removeSelectionGuide();
+  if (canvas) {
+    canvas.defaultCursor = "default";
+    canvas.selection = true;
+    canvas.getObjects().forEach((object) => {
+      if (!object.grokSelectionGuide) object.evented = true;
+    });
+    canvas.requestRenderAll();
+  }
+}
+
 function createStylePanel(menuName, options = {}) {
   const list = document.querySelector(`.tui-image-editor-menu-${menuName} .tui-image-editor-submenu-item`);
   if (!list) return null;
   const host = document.createElement("li");
   const colors = document.createElement("div");
+  const nativeFill = findNativeFillOption(list);
   host.className = `custom-style-options custom-${menuName}-style-options tui-image-editor-newline`;
+  if (nativeFill) host.classList.add("custom-style-replacement");
   colors.className = "custom-style-colors";
   const fill = makeColorOption("Fill", "#fbad2e", (color) => applyObjectStyle(menuName, { fill: color }));
   const stroke = makeColorOption("Stroke", "#ffffff", (color) => applyObjectStyle(menuName, { stroke: color }));
   colors.append(fill.label, stroke.label);
   const strokeWidth = makeCustomRange("Stroke", 0, 40, 2, (value) => applyObjectStyle(menuName, { strokeWidth: value }));
   host.append(colors, strokeWidth.control);
-  list.appendChild(host);
+  if (nativeFill) {
+    nativeFill.classList.add("custom-native-fill-hidden");
+    list.insertBefore(host, nativeFill);
+  } else {
+    list.appendChild(host);
+  }
   const panel = { host, fill, stroke, strokeWidth, kind: options.kind || "both" };
   setStylePanelKind(panel, panel.kind);
   return panel;
+}
+
+function findNativeFillOption(list) {
+  return Array.from(list.children).find((item) => {
+    if (item.classList.contains("custom-opacity-options")
+      || item.classList.contains("custom-style-options")
+      || item.classList.contains("custom-font-options")) return false;
+    if (item.querySelector(".tie-text-color, .tie-icon-color")) return true;
+    const text = item.textContent.trim().toLowerCase();
+    return (text === "fill" || text === "color" || text.endsWith("fill") || text.endsWith("color"))
+      && item.querySelector('input[type="color"], .tui-colorpicker-palette-button');
+  }) || null;
 }
 
 function setStylePanelKind(panel, kind) {
@@ -526,8 +580,19 @@ function installIconAndTextStyles() {
     button.addEventListener("click", () => {
       pendingIconKind = "fill";
       pendingIconName = "";
+      setCustomIconButtonState(null);
       setStylePanelKind(iconStylePanel, "fill");
     });
+  });
+}
+
+function setCustomIconButtonState(activeButton) {
+  document.querySelectorAll(".tui-image-editor-menu-icon .custom-icon-button").forEach((button) => {
+    button.classList.toggle("active", button === activeButton);
+  });
+  if (!activeButton) return;
+  document.querySelectorAll(".tui-image-editor-menu-icon .tui-image-editor-button.active:not(.custom-icon-button)").forEach((button) => {
+    button.classList.remove("active");
   });
 }
 
@@ -547,6 +612,7 @@ function installCustomIcons() {
     button.addEventListener("click", () => {
       pendingIconKind = "stroke";
       pendingIconName = name;
+      setCustomIconButtonState(button);
       setStylePanelKind(iconStylePanel, "stroke");
       imageEditor.startDrawingMode("ICON");
       imageEditor.setDrawingIcon(name, {
@@ -601,21 +667,30 @@ function installHandTool() {
 function removeSelectionGuide() {
   const canvas = editorCanvas();
   if (selectionGuide && canvas) canvas.remove(selectionGuide);
+  if (selectionInverseGuide && canvas) canvas.remove(selectionInverseGuide);
   selectionGuide = null;
+  selectionInverseGuide = null;
+  selectionInverse = false;
+  resetSelectionFilterBaseline();
 }
 
 function selectionBounds() {
   if (!selectionGuide) return null;
+  const size = imageEditor.getCanvasSize();
+  const left = Math.max(0, selectionGuide.left || 0);
+  const top = Math.max(0, selectionGuide.top || 0);
+  const width = Math.min(Math.max(1, selectionGuide.getScaledWidth()), Math.max(1, size.width - left));
+  const height = Math.min(Math.max(1, selectionGuide.getScaledHeight()), Math.max(1, size.height - top));
   return {
-    left: Math.max(0, selectionGuide.left || 0),
-    top: Math.max(0, selectionGuide.top || 0),
-    width: Math.max(1, selectionGuide.getScaledWidth()),
-    height: Math.max(1, selectionGuide.getScaledHeight()),
+    left,
+    top,
+    width,
+    height,
     shape: selectionGuide.type === "ellipse" ? "ellipse" : "rect",
   };
 }
 
-function drawMaskShape(context, bounds) {
+function traceMaskShape(context, bounds) {
   context.beginPath();
   if (bounds.shape === "ellipse") {
     context.ellipse(
@@ -630,7 +705,101 @@ function drawMaskShape(context, bounds) {
   } else {
     context.rect(bounds.left, bounds.top, bounds.width, bounds.height);
   }
+}
+
+function drawMaskShape(context, bounds) {
+  traceMaskShape(context, bounds);
   context.fill();
+}
+
+function selectionGuideStyle() {
+  return {
+    fill: "transparent",
+    stroke: "#ffffff",
+    strokeWidth: 2,
+    strokeDashArray: [8, 6],
+    selectable: false,
+    evented: false,
+    excludeFromExport: true,
+    grokSelectionGuide: true,
+  };
+}
+
+function applySelectionGuideBounds(bounds) {
+  if (!selectionGuide) return;
+  selectionGuide.set({
+    left: bounds.left,
+    top: bounds.top,
+    width: bounds.width,
+    height: bounds.height,
+  });
+  if (selectionGuide.type === "ellipse") {
+    selectionGuide.set({ rx: bounds.width / 2, ry: bounds.height / 2 });
+  }
+  selectionGuide.setCoords();
+  updateInverseSelectionGuide();
+}
+
+function createSelectionGuide(bounds) {
+  const canvas = editorCanvas();
+  removeSelectionGuide();
+  const style = selectionGuideStyle();
+  selectionGuide = bounds.shape === "ellipse"
+    ? new fabric.Ellipse({ ...style, left: bounds.left, top: bounds.top, width: bounds.width, height: bounds.height, rx: bounds.width / 2, ry: bounds.height / 2 })
+    : new fabric.Rect({ ...style, left: bounds.left, top: bounds.top, width: bounds.width, height: bounds.height });
+  canvas.add(selectionGuide);
+  updateInverseSelectionGuide();
+  canvas.requestRenderAll();
+}
+
+function updateInverseSelectionGuide() {
+  const canvas = editorCanvas();
+  if (!canvas) return;
+  if (selectionInverseGuide) {
+    canvas.remove(selectionInverseGuide);
+    selectionInverseGuide = null;
+  }
+  if (!selectionInverse || !selectionGuide) return;
+  const size = imageEditor.getCanvasSize();
+  selectionInverseGuide = new fabric.Rect({
+    ...selectionGuideStyle(),
+    left: 0,
+    top: 0,
+    width: size.width,
+    height: size.height,
+  });
+  canvas.add(selectionInverseGuide);
+  canvas.bringToFront(selectionGuide);
+  canvas.requestRenderAll();
+}
+
+function activateSelectionTool() {
+  const canvas = editorCanvas();
+  resetEditorInteraction({ keepSelectionGuide: true });
+  selectionMode = "select";
+  showCustomPanel("selection");
+  canvas.discardActiveObject();
+  canvas.selection = false;
+  canvas.defaultCursor = "crosshair";
+  canvas.requestRenderAll();
+}
+
+function activateEraserTool() {
+  resetEditorInteraction();
+  eraserMode = true;
+  showCustomPanel("eraser");
+  applyEraserBrush();
+}
+
+function selectFullImage() {
+  resetSelectionFilterBaseline();
+  selectionShape = "rect";
+  document.querySelector(".selection-rectangle")?.classList.add("active");
+  document.querySelector(".selection-ellipse")?.classList.remove("active");
+  activateSelectionTool();
+  const size = imageEditor.getCanvasSize();
+  createSelectionGuide({ left: 0, top: 0, width: size.width, height: size.height, shape: "rect" });
+  setStatus("All selected.");
 }
 
 function loadImage(url) {
@@ -644,12 +813,139 @@ function loadImage(url) {
 
 function imageWithoutSelection() {
   const canvas = editorCanvas();
-  const guide = selectionGuide;
-  if (guide) canvas.remove(guide);
+  const guides = [selectionGuide, selectionInverseGuide].filter(Boolean);
+  guides.forEach((guide) => canvas.remove(guide));
   const url = imageEditor.toDataURL({ format: "png" });
-  if (guide) canvas.add(guide);
+  guides.forEach((guide) => canvas.add(guide));
   canvas.requestRenderAll();
   return url;
+}
+
+function selectionFilterKey(filterType, bounds, inverse, feather) {
+  return JSON.stringify({
+    filterType,
+    inverse,
+    feather,
+    left: Math.round(bounds.left),
+    top: Math.round(bounds.top),
+    width: Math.round(bounds.width),
+    height: Math.round(bounds.height),
+    shape: bounds.shape,
+  });
+}
+
+async function renderFilteredImage(sourceUrl, filterType, options) {
+  const host = document.createElement("div");
+  host.style.cssText = "position:fixed;left:-10000px;top:-10000px;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none;";
+  document.body.appendChild(host);
+  const tempEditor = new tui.ImageEditor(host, {
+    cssMaxWidth: 4096,
+    cssMaxHeight: 4096,
+    usageStatistics: false,
+  });
+  try {
+    await tempEditor.loadImageFromURL(sourceUrl, imageName);
+    await tempEditor.applyFilter(filterType, options || {});
+    return tempEditor.toDataURL({ format: "png" });
+  } finally {
+    tempEditor.destroy();
+    host.remove();
+  }
+}
+
+async function applyFilterToSelection(filterType, options) {
+  const bounds = selectionBounds();
+  if (!bounds) throw new Error("Make a selection first.");
+  const inverse = selectionInverse;
+  const feather = selectionFeather;
+  const key = selectionFilterKey(filterType, bounds, inverse, feather);
+  if (!selectionFilterBaseline || selectionFilterBaseline.key !== key) {
+    selectionFilterBaseline = {
+      key,
+      filterType,
+      bounds: { ...bounds },
+      inverse,
+      feather,
+      sourceUrl: imageWithoutSelection(),
+    };
+  }
+  const source = await loadImage(selectionFilterBaseline.sourceUrl);
+  const filtered = await loadImage(await renderFilteredImage(selectionFilterBaseline.sourceUrl, filterType, options));
+  const mask = document.createElement("canvas");
+  const filteredLayer = document.createElement("canvas");
+  const output = document.createElement("canvas");
+  mask.width = filteredLayer.width = output.width = source.width;
+  mask.height = filteredLayer.height = output.height = source.height;
+  const maskContext = mask.getContext("2d");
+  const filteredContext = filteredLayer.getContext("2d");
+  const outputContext = output.getContext("2d");
+
+  maskContext.fillStyle = "#fff";
+  if (inverse) {
+    maskContext.fillRect(0, 0, mask.width, mask.height);
+    maskContext.globalCompositeOperation = "destination-out";
+  }
+  maskContext.filter = feather ? `blur(${feather}px)` : "none";
+  drawMaskShape(maskContext, bounds);
+
+  filteredContext.drawImage(filtered, 0, 0);
+  filteredContext.globalCompositeOperation = "destination-in";
+  filteredContext.drawImage(mask, 0, 0);
+  outputContext.drawImage(source, 0, 0);
+  outputContext.drawImage(filteredLayer, 0, 0);
+
+  selectionGuide = null;
+  selectionInverseGuide = null;
+  await imageEditor.loadImageFromURL(output.toDataURL("image/png"), imageName);
+  createSelectionGuide({ ...bounds, shape: bounds.shape });
+  selectionInverse = inverse;
+  if (selectionInverse) updateInverseSelectionGuide();
+  selectionFeather = feather;
+  setStatus("Filter applied to selection.");
+}
+
+async function restoreSelectionFilterBaseline(filterType) {
+  if (!selectionFilterBaseline || selectionFilterBaseline.filterType !== filterType) return;
+  const { sourceUrl, bounds, inverse, feather } = selectionFilterBaseline;
+  selectionGuide = null;
+  selectionInverseGuide = null;
+  selectionFilterBaseline = null;
+  await imageEditor.loadImageFromURL(sourceUrl, imageName);
+  createSelectionGuide({ ...bounds, shape: bounds.shape });
+  selectionInverse = inverse;
+  selectionFeather = feather;
+  if (selectionInverse) updateInverseSelectionGuide();
+  setStatus("Selection filter removed.");
+}
+
+function bindSelectionFilterProxy() {
+  if (!imageEditor?.applyFilter || imageEditor.applyFilter.__grokSelectionProxy) return;
+  const nativeApplyFilter = imageEditor.applyFilter.bind(imageEditor);
+  const nativeRemoveFilter = imageEditor.removeFilter?.bind(imageEditor);
+  imageEditor.applyFilter = (filterType, options, isSilent) => {
+    if (selectionGuide) {
+      return applyFilterToSelection(filterType, options).catch((error) => {
+        setStatus(error.message, "error");
+        throw error;
+      });
+    }
+    resetSelectionFilterBaseline();
+    return nativeApplyFilter(filterType, options, isSilent);
+  };
+  if (nativeRemoveFilter) {
+    imageEditor.removeFilter = (filterType) => {
+      if (selectionGuide && selectionFilterBaseline?.filterType === filterType) {
+        return restoreSelectionFilterBaseline(filterType).catch((error) => {
+          setStatus(error.message, "error");
+          throw error;
+        });
+      }
+      resetSelectionFilterBaseline();
+      return nativeRemoveFilter(filterType);
+    };
+    imageEditor.removeFilter.__grokSelectionProxy = true;
+  }
+  imageEditor.applyFilter.__grokSelectionProxy = true;
 }
 
 async function maskedSelectionData(inverse = selectionInverse) {
@@ -708,10 +1004,10 @@ async function replaceWithDeletedSelection() {
   context.filter = selectionFeather ? `blur(${selectionFeather}px)` : "none";
   if (selectionInverse) {
     context.fillRect(0, 0, output.width, output.height);
-    context.globalCompositeOperation = "destination-over";
+    context.globalCompositeOperation = "source-over";
     context.filter = "none";
     context.save();
-    drawMaskShape(context, bounds);
+    traceMaskShape(context, bounds);
     context.clip();
     context.drawImage(source, 0, 0);
     context.restore();
@@ -733,6 +1029,13 @@ async function pasteSelection() {
       left: pixelClipboard.left + Number(imageProps?.width || 0) / 2,
       top: pixelClipboard.top + Number(imageProps?.height || 0) / 2,
     });
+    const canvas = editorCanvas();
+    const object = canvas?.getObjects().find((candidate) => candidate.id === movedSelectionId);
+    if (object) {
+      object.set({ selectable: true, evented: true, hasControls: true, hasBorders: true });
+      canvas.setActiveObject(object);
+      canvas.requestRenderAll();
+    }
   }
   setStatus("Selection pasted.");
 }
@@ -742,18 +1045,18 @@ async function cutSelection() {
   await replaceWithDeletedSelection();
 }
 
-async function moveSelection() {
+async function transformSelection() {
   await cutSelection();
   await pasteSelection();
   selectionMode = "";
   const canvas = editorCanvas();
   canvas.selection = true;
   canvas.defaultCursor = "default";
-  setStatus("Selection can now be moved, resized, or rotated.");
+  setStatus("Free Transform ready.");
 }
 
 async function flipMovedSelection(axis) {
-  if (!movedSelectionId) await moveSelection();
+  if (!movedSelectionId) await transformSelection();
   const prop = axis === "x" ? "flipX" : "flipY";
   const current = imageEditor.getObjectProperties(movedSelectionId, prop)?.[prop];
   imageEditor.setObjectPropertiesQuietly(movedSelectionId, { [prop]: !current });
@@ -802,9 +1105,10 @@ function installSelectionTool() {
   actions.append(
     makeActionButton("Inverse", () => {
       selectionInverse = !selectionInverse;
+      updateInverseSelectionGuide();
       setStatus(selectionInverse ? "Inverse selection enabled." : "Inverse selection disabled.");
     }),
-    makeActionButton("Move", moveSelection),
+    makeActionButton("Transform", transformSelection),
   );
   transforms.append(
     makeFlipActionButton("x", () => flipMovedSelection("x")),
@@ -815,16 +1119,7 @@ function installSelectionTool() {
   });
   panel.append(shapes, actions, transforms, feather.control);
   button?.addEventListener("click", () => {
-    const canvas = editorCanvas();
-    handMode = false;
-    eraserMode = false;
-    selectionMode = "select";
-    showCustomPanel("selection");
-    imageEditor.stopDrawingMode();
-    canvas.discardActiveObject();
-    canvas.selection = false;
-    canvas.defaultCursor = "crosshair";
-    canvas.requestRenderAll();
+    activateSelectionTool();
   });
   const canvas = editorCanvas();
   canvas.on("mouse:down", (event) => {
@@ -832,19 +1127,13 @@ function installSelectionTool() {
     const point = canvas.getPointer(event.e);
     selectionStart = point;
     removeSelectionGuide();
+    selectionInverse = false;
     const base = {
       left: point.x,
       top: point.y,
       width: 1,
       height: 1,
-      fill: "rgba(251,173,46,0.08)",
-      stroke: "#fbad2e",
-      strokeWidth: 1,
-      strokeDashArray: [6, 5],
-      selectable: false,
-      evented: false,
-      excludeFromExport: true,
-      grokSelectionGuide: true,
+      ...selectionGuideStyle(),
     };
     selectionGuide = selectionShape === "ellipse" ? new fabric.Ellipse({ ...base, rx: 1, ry: 1 }) : new fabric.Rect(base);
     canvas.add(selectionGuide);
@@ -852,13 +1141,15 @@ function installSelectionTool() {
   canvas.on("mouse:move", (event) => {
     if (selectionMode !== "select" || !selectionStart || !selectionGuide) return;
     const point = canvas.getPointer(event.e);
-    const left = Math.min(selectionStart.x, point.x);
-    const top = Math.min(selectionStart.y, point.y);
-    const width = Math.abs(point.x - selectionStart.x);
-    const height = Math.abs(point.y - selectionStart.y);
-    selectionGuide.set({ left, top, width, height });
-    if (selectionGuide.type === "ellipse") selectionGuide.set({ rx: width / 2, ry: height / 2 });
-    selectionGuide.setCoords();
+    const rawWidth = point.x - selectionStart.x;
+    const rawHeight = point.y - selectionStart.y;
+    const constrained = event.e.shiftKey;
+    const size = Math.max(Math.abs(rawWidth), Math.abs(rawHeight));
+    const width = constrained ? size : Math.abs(rawWidth);
+    const height = constrained ? size : Math.abs(rawHeight);
+    const left = rawWidth < 0 ? selectionStart.x - width : selectionStart.x;
+    const top = rawHeight < 0 ? selectionStart.y - height : selectionStart.y;
+    applySelectionGuideBounds({ left, top, width, height, shape: selectionShape });
     canvas.requestRenderAll();
   });
   canvas.on("mouse:up", () => {
@@ -915,12 +1206,7 @@ function installEraserTool() {
   });
   panel.append(brushes, size.control, opacity.control);
   button?.addEventListener("click", () => {
-    handMode = false;
-    selectionMode = "";
-    eraserMode = true;
-    showCustomPanel("eraser");
-    removeSelectionGuide();
-    applyEraserBrush();
+    activateEraserTool();
   });
   editorCanvas().on("path:created", (event) => {
     if (!eraserMode || !event.path) return;
@@ -947,6 +1233,12 @@ function bindEditorShortcuts() {
       event.preventDefault();
       event.stopImmediatePropagation();
       (event.shiftKey ? imageEditor.redo() : imageEditor.undo()).catch(() => {});
+      return;
+    }
+    if (command && key === "a") {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      selectFullImage();
       return;
     }
     if (!command && key === "m") {
@@ -979,11 +1271,12 @@ function bindEditorShortcuts() {
       event.preventDefault();
       event.stopImmediatePropagation();
       selectionInverse = !selectionInverse;
+      updateInverseSelectionGuide();
       setStatus(selectionInverse ? "Inverse selection enabled." : "Inverse selection disabled.");
     } else if (selectionGuide && command && key === "t") {
       event.preventDefault();
       event.stopImmediatePropagation();
-      moveSelection().catch((error) => setStatus(error.message, "error"));
+      transformSelection().catch((error) => setStatus(error.message, "error"));
     } else if (selectionGuide && (event.key === "Delete" || event.key === "Backspace")) {
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -1135,10 +1428,8 @@ function bindBuiltInMenuReset() {
   document.querySelectorAll(".tui-image-editor-menu > .tui-image-editor-item:not(.custom-main-tool)").forEach((button) => {
     button.addEventListener("click", () => {
       hideCustomPanels();
-      selectionMode = "";
-      eraserMode = false;
-      removeSelectionGuide();
-    });
+      resetEditorInteraction({ keepSelectionGuide: button.classList.contains("tie-btn-filter") });
+    }, true);
   });
 }
 
@@ -1223,6 +1514,7 @@ function init() {
   bindWheelRangeControls();
   bindWheelZoom();
   bindZoomButtons();
+  bindSelectionFilterProxy();
   setFeatherControl();
   loadSystemFonts();
   window.setTimeout(() => {
