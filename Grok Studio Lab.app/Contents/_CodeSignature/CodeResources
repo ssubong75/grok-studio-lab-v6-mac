@@ -12,6 +12,10 @@
 		<data>
 		KjfGqpHdoQ/ytCVfCcXz3N3uMqo=
 		</data>
+		<key>Resources/GrokStudio/__pycache__/grok_studio.cpython-314.pyc</key>
+		<data>
+		MaCUtr52DdXe+ua9wQRviGkprsA=
+		</data>
 		<key>Resources/GrokStudio/grok_media.py</key>
 		<data>
 		0uQXRedbj+3hEW3wNQ60Mvlljnk=
@@ -38,7 +42,7 @@
 		</data>
 		<key>Resources/GrokStudio/studio_static/app.js</key>
 		<data>
-		DauQqq/j+LmjP+Bavodi55mjLYQ=
+		zPFCFGt0oqcLkHG6tVvZuMi4Z0M=
 		</data>
 		<key>Resources/GrokStudio/studio_static/editor.css</key>
 		<data>
@@ -114,7 +118,7 @@
 		</data>
 		<key>Resources/GrokStudio/studio_static/index.html</key>
 		<data>
-		cjexagYuGIGwIjhhOb2oR9EDUls=
+		yhcxIV1njTY+lJyUSYLysoll6JQ=
 		</data>
 		<key>Resources/GrokStudio/studio_static/tui-icons.svg</key>
 		<data>
@@ -169,6 +173,13 @@
 			K67U4epVhjdrA+T0LNF3AJ+m0H8wKDL4IdlAI9ZThEI=
 			</data>
 		</dict>
+		<key>Resources/GrokStudio/__pycache__/grok_studio.cpython-314.pyc</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			6bRqVDBvB7FO62RVeGmKIoP0YAUpajEk4yXkPzDIoGM=
+			</data>
+		</dict>
 		<key>Resources/GrokStudio/grok_media.py</key>
 		<dict>
 			<key>hash2</key>
@@ -215,7 +226,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			9GPyJ3VyaJnbMSVVPiilZJmPb234bD1uIE1JooiFOpg=
+			XgSqZipDEWQWUyJWF6+yGONeQPq5mW+E49ismYM7vJQ=
 			</data>
 		</dict>
 		<key>Resources/GrokStudio/studio_static/editor.css</key>
@@ -348,7 +359,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			rNH9mwftxDvY/0bjCLQ4xmniWXqNxT6quiKsaCVL/1E=
+			dRWAimhsnQ2nm5Iu7sPQQJ+R5YPg1Zvcp52PlT+cHCI=
 			</data>
 		</dict>
 		<key>Resources/GrokStudio/studio_static/tui-icons.svg</key>

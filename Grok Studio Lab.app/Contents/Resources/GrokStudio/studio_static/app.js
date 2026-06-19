@@ -3,6 +3,9 @@ const isWindowsPlatform = requestedPlatform === "windows" || /Windows/i.test(Str
 document.documentElement.classList.toggle("platform-windows", isWindowsPlatform);
 const INTERNAL_EDITOR_NAV_KEY = "grokStudioInternalEditorNavigation";
 const IMAGE_EDITOR_SAVED_KEY = "grokStudioImageEditorSavedItemId";
+const VIDEO_MODEL_15 = "grok-imagine-video-1.5";
+const VIDEO_MODEL_15_PREVIEW = "grok-imagine-video-1.5-preview";
+const savedVideoModel = localStorage.getItem("grokStudioVideoModel");
 
 const state = {
   items: [],
@@ -45,7 +48,7 @@ const state = {
   moveToGalleryOverlay: null,
   galleryActionOverlay: null,
   accountScreenVisible: false,
-  videoModel: localStorage.getItem("grokStudioVideoModel") || "",
+  videoModel: savedVideoModel === null ? VIDEO_MODEL_15 : savedVideoModel,
   imageModel: localStorage.getItem("grokStudioImageModel") || "grok-imagine-image",
   durationMode: "",
   resolutionMode: "",
@@ -942,11 +945,8 @@ function setImageModel(model) {
 }
 
 function setVideoModel(model) {
-  const normalizedModel = model === "grok-imagine-video-1.5-preview"
-    ? "grok-imagine-video-1.5"
-    : model;
-  const allowed = ["", "grok-imagine-video-1.5"];
-  state.videoModel = allowed.includes(normalizedModel) ? normalizedModel : "";
+  const allowed = ["", VIDEO_MODEL_15, VIDEO_MODEL_15_PREVIEW];
+  state.videoModel = allowed.includes(model) ? model : VIDEO_MODEL_15;
   localStorage.setItem("grokStudioVideoModel", state.videoModel);
   if (els.videoModelInput && els.videoModelInput.value !== state.videoModel) {
     els.videoModelInput.value = state.videoModel;
@@ -2150,6 +2150,8 @@ function detailModelLabel(item) {
   if (!item || !["image", "video"].includes(item.type)) return "";
   const model = String(item.metadata?.model || item.model || "").toLowerCase();
   if (item.type === "video") {
+    if (!model) return "Model 1.0";
+    if (model.includes("1.5-preview")) return "Model 1.5p";
     if (model.includes("1.5")) return "Model 1.5";
     if (model.includes("grok-imagine-video")) return "Model 1.0";
     return "";
@@ -2939,7 +2941,7 @@ function setMode(mode, options = {}) {
   }
   state.mode = mode;
   if (mode === "extend" && previousMode !== "extend") {
-    setVideoModel("");
+    setVideoModel(state.videoModel);
   }
   const composer = els.promptInput?.closest(".lab-composer");
   composer?.classList.toggle("extend-mode", mode === "extend");
@@ -3711,8 +3713,11 @@ function selectedImageModel() {
 }
 
 function selectedVideoModel() {
-  if (state.videoModel === "grok-imagine-video-1.5-preview") return "grok-imagine-video-1.5";
-  return state.videoModel || undefined;
+  if ([VIDEO_MODEL_15, VIDEO_MODEL_15_PREVIEW].includes(state.videoModel)) {
+    return state.videoModel;
+  }
+  if (state.videoModel === "") return undefined;
+  return VIDEO_MODEL_15;
 }
 
 function selectedDuration(fallback) {
