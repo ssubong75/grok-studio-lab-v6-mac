@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Grok Studio Lab</title>
-    <link rel="stylesheet" href="/assets/app.css?v=lab-v6-20260615-03" />
+    <link rel="stylesheet" href="/assets/app.css?v=lab-v6-selected-thumb-delete-20260618-01" />
   </head>
   <body>
     <button id="sidebarOpenBtn" class="sidebar-open" data-symbol="&gt;&gt;" hidden aria-label="Open sidebar">&gt;&gt;</button>
@@ -95,7 +95,7 @@
           <div class="folder-gallery-layout">
             <section class="primary-folder-panel" aria-label="Primary folders">
               <div class="folder-panel-heading">
-                <strong>Collections</strong>
+                <button id="collectionHeadingBtn" class="collection-heading-button" type="button" aria-pressed="false">Collection</button>
               </div>
               <div id="primaryFolderList" class="primary-folder-list"></div>
             </section>
@@ -106,7 +106,7 @@
                   <button type="button" data-gallery-sort="abc">ABC</button>
                   <button id="saveGallerySortBtn" class="save-gallery-sort-button" type="button">Save</button>
                 </div>
-                <strong id="secondaryFolderTitle">Select a collection</strong>
+                <strong id="secondaryFolderTitle"></strong>
               </div>
               <div id="secondaryFolderGrid" class="secondary-folder-grid"></div>
             </section>
@@ -188,7 +188,7 @@
                   <span class="control-name">Model</span>
                   <select id="videoModelInput">
                     <option value="">Model 1.0</option>
-                    <option value="grok-imagine-video-1.5-preview">Model 1.5</option>
+                    <option value="grok-imagine-video-1.5">Model 1.5</option>
                   </select>
                 </label>
                 <label id="analyzeModelControl">
@@ -337,6 +337,6 @@
         </select>
       </div>
     </div>
-    <script src="/assets/app.js?v=lab-v6-20260615-03"></script>
+    <script src="/assets/app.js?v=lab-v6-selected-thumb-delete-20260618-01"></script>
   </body>
 </html>

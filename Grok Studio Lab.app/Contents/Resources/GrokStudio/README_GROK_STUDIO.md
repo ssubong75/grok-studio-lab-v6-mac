@@ -129,7 +129,7 @@ video extension.
 - Text-to-video
 - Image-to-video
 - Reference-to-video with up to 7 Reference Images and per-image removal
-- Video model toggle: Default `grok-imagine-video`, optional `grok-imagine-video-1.5-preview`
+- Video model toggle: Default `grok-imagine-video`, optional `grok-imagine-video-1.5`
 - Video extension by dropping a Library video or uploading an MP4, with playable thumbnail preview
 - Extend from the paused point when ffmpeg is installed locally
 - Image Count selector: 1 to 4, default 1

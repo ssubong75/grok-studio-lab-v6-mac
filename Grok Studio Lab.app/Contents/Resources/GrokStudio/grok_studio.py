@@ -940,6 +940,9 @@ class Library:
         self.metadata_dir = paths["metadata"]
         self.using_external_root = self.root.resolve() != DATA_DIR.resolve()
 
+    def trash_manifest_path(self) -> Path:
+        return self.metadata_dir / "trash_manifest.json"
+
     def set_root(self, root_text: str) -> dict[str, Any]:
         root_text = str(root_text or "").strip()
         if not root_text:
@@ -989,6 +992,45 @@ class Library:
             temp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
             temp.replace(self.db_path)
 
+    def _read_trash_manifest(self) -> dict[str, Any]:
+        with self.lock:
+            self.reload_paths()
+            path = self.trash_manifest_path()
+            try:
+                raw = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                raw = {}
+            entries = raw.get("items") if isinstance(raw, dict) else []
+            folders = raw.get("folders") if isinstance(raw, dict) else []
+            return {
+                "version": 1,
+                "items": [entry for entry in entries if isinstance(entry, dict)] if isinstance(entries, list) else [],
+                "folders": [entry for entry in folders if isinstance(entry, dict)] if isinstance(folders, list) else [],
+            }
+
+    def _write_trash_manifest(self, manifest: dict[str, Any]) -> None:
+        with self.lock:
+            self.reload_paths()
+            path = self.trash_manifest_path()
+            entries = manifest.get("items")
+            folders = manifest.get("folders")
+            entries = entries if isinstance(entries, list) else []
+            folders = folders if isinstance(folders, list) else []
+            if not entries and not folders:
+                try:
+                    if path.exists():
+                        path.unlink()
+                except OSError as exc:
+                    log_event(f"could not remove empty trash manifest: {exc}")
+                return
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temp = path.with_suffix(".tmp")
+            temp.write_text(
+                json.dumps({"version": 1, "items": entries, "folders": folders}, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            temp.replace(path)
+
     def media_url(self, path: Path) -> str:
         path = path.resolve()
         roots = [MEDIA_DIR.resolve(), self.root.resolve()]
@@ -1002,7 +1044,9 @@ class Library:
 
     def state(self) -> dict[str, Any]:
         data = self._read()
-        changed = self.dedupe_imported_items(data)
+        changed = self.restore_trashed_items(data)
+        if self.dedupe_imported_items(data):
+            changed = True
         if self.sync_disk_files(data):
             changed = True
         if changed:
@@ -1063,6 +1107,233 @@ class Library:
             data["items"] = kept
             log_event(f"removed {removed} duplicate auto-imported library item(s)")
         return removed
+
+    def remember_deleted_items(self, candidates: list[dict[str, Any]]) -> None:
+        entries: list[dict[str, Any]] = []
+        for item in candidates:
+            if item.get("type") not in {"image", "video"}:
+                continue
+            file_path = item.get("file")
+            if not isinstance(file_path, str) or not file_path:
+                continue
+            item_copy = json.loads(json.dumps(item, ensure_ascii=False))
+            entry: dict[str, Any] = {
+                "id": str(item.get("id") or ""),
+                "identity": self.item_file_identity(item),
+                "file": file_path,
+                "metadata_file": item.get("metadata_file") if isinstance(item.get("metadata_file"), str) else "",
+                "deleted_at": utc_now(),
+                "item": item_copy,
+            }
+            metadata_path = item.get("metadata_file")
+            if isinstance(metadata_path, str) and metadata_path:
+                try:
+                    path = Path(metadata_path).expanduser()
+                    if path.is_file():
+                        entry["metadata_text"] = path.read_text(encoding="utf-8")
+                except OSError as exc:
+                    log_event(f"could not snapshot metadata before Trash move: {exc}")
+            entries.append(entry)
+        if not entries:
+            return
+
+        manifest = self._read_trash_manifest()
+        previous = manifest.get("items", [])
+        entry_ids = {entry.get("id") for entry in entries if entry.get("id")}
+        entry_identities = {entry.get("identity") for entry in entries if entry.get("identity")}
+        manifest["items"] = [
+            entry
+            for entry in previous
+            if entry.get("id") not in entry_ids and entry.get("identity") not in entry_identities
+        ]
+        manifest["items"].extend(entries)
+        manifest["items"] = manifest["items"][-1000:]
+        self._write_trash_manifest(manifest)
+
+    def remember_deleted_gallery_folders(self, candidates: list[dict[str, Any]], data: dict[str, Any]) -> None:
+        entries: list[dict[str, Any]] = []
+        for folder in candidates:
+            folder_id = str(folder.get("id") or "")
+            if not folder_id:
+                continue
+            try:
+                folder_path = self.gallery_folder_path(folder_id, data)
+            except StudioError:
+                continue
+            entries.append(
+                {
+                    "id": folder_id,
+                    "path": str(folder_path),
+                    "deleted_at": utc_now(),
+                    "folder": json.loads(json.dumps(folder, ensure_ascii=False)),
+                }
+            )
+        if not entries:
+            return
+
+        manifest = self._read_trash_manifest()
+        previous = manifest.get("folders", [])
+        entry_ids = {entry.get("id") for entry in entries if entry.get("id")}
+        manifest["folders"] = [
+            entry
+            for entry in previous
+            if entry.get("id") not in entry_ids
+        ]
+        manifest["folders"].extend(entries)
+        manifest["folders"] = manifest["folders"][-1000:]
+        self._write_trash_manifest(manifest)
+
+    def restore_trashed_items(self, data: dict[str, Any]) -> int:
+        manifest = self._read_trash_manifest()
+        entries = manifest.get("items", [])
+        folder_entries = manifest.get("folders", [])
+        if not entries and not folder_entries:
+            return 0
+
+        restored_folders = self.restore_trashed_gallery_folders(data, folder_entries)
+        existing_folder_ids = {
+            str(folder.get("id") or "")
+            for folder in data.get("gallery_folders", [])
+            if isinstance(folder, dict) and folder.get("id")
+        }
+        items = data.setdefault("items", [])
+        categories = data.setdefault("categories", [])
+        existing_ids = {
+            str(item.get("id") or "")
+            for item in items
+            if isinstance(item, dict) and item.get("id")
+        }
+        existing_by_identity: dict[str, dict[str, Any]] = {}
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            identity = self.item_file_identity(item)
+            if identity and identity not in existing_by_identity:
+                existing_by_identity[identity] = item
+
+        kept_entries: list[dict[str, Any]] = []
+        restored = 0
+        manifest_changed = False
+        for entry in entries:
+            item = entry.get("item")
+            if not isinstance(item, dict):
+                manifest_changed = True
+                continue
+            item_id = str(item.get("id") or entry.get("id") or "")
+            if item_id and item_id in existing_ids:
+                manifest_changed = True
+                continue
+            if item.get("type") not in {"image", "video"}:
+                manifest_changed = True
+                continue
+
+            metadata = item.get("metadata")
+            gallery_folder_id = str(metadata.get("gallery_folder_id") or "") if isinstance(metadata, dict) else ""
+            if gallery_folder_id and gallery_folder_id not in existing_folder_ids:
+                kept_entries.append(entry)
+                continue
+
+            file_path = item.get("file") if isinstance(item.get("file"), str) else entry.get("file")
+            if not isinstance(file_path, str) or not file_path:
+                manifest_changed = True
+                continue
+            media_path = Path(file_path).expanduser()
+            if not media_path.is_file():
+                kept_entries.append(entry)
+                continue
+
+            if item.get("local_url"):
+                try:
+                    item["local_url"] = self.media_url(media_path)
+                except StudioError:
+                    pass
+            identity = self.item_file_identity(item)
+            existing = existing_by_identity.get(identity) if identity else None
+            if existing and not self.is_imported_item(existing):
+                manifest_changed = True
+                continue
+
+            self.restore_trashed_metadata_file(item, entry)
+            category = item.get("category") or "Inbox"
+            if category not in categories:
+                categories.append(category)
+            items.append(item)
+            if item_id:
+                existing_ids.add(item_id)
+            if identity:
+                existing_by_identity[identity] = item
+            restored += 1
+            manifest_changed = True
+
+        if manifest_changed:
+            kept_folder_entries = [
+                entry
+                for entry in folder_entries
+                if isinstance(entry, dict)
+                and str(entry.get("id") or "") not in existing_folder_ids
+            ]
+            self._write_trash_manifest({"version": 1, "items": kept_entries, "folders": kept_folder_entries})
+        elif restored_folders:
+            kept_folder_entries = [
+                entry
+                for entry in folder_entries
+                if isinstance(entry, dict)
+                and str(entry.get("id") or "") not in existing_folder_ids
+            ]
+            self._write_trash_manifest({"version": 1, "items": entries, "folders": kept_folder_entries})
+        if restored:
+            log_event(f"restored {restored} library item(s) returned from Trash")
+        if restored_folders:
+            log_event(f"restored {restored_folders} Gallery folder(s) returned from Trash")
+        return restored + restored_folders
+
+    def restore_trashed_gallery_folders(self, data: dict[str, Any], entries: list[Any]) -> int:
+        if not entries:
+            return 0
+        folders = data.setdefault("gallery_folders", [])
+        existing_ids = {
+            str(folder.get("id") or "")
+            for folder in folders
+            if isinstance(folder, dict) and folder.get("id")
+        }
+        restored = 0
+        ordered_entries = sorted(
+            (entry for entry in entries if isinstance(entry, dict)),
+            key=lambda entry: bool((entry.get("folder") or {}).get("parent_id")) if isinstance(entry.get("folder"), dict) else True,
+        )
+        for entry in ordered_entries:
+            folder = entry.get("folder")
+            if not isinstance(folder, dict):
+                continue
+            folder_id = str(folder.get("id") or entry.get("id") or "")
+            if not folder_id or folder_id in existing_ids:
+                continue
+            path_text = entry.get("path")
+            if not isinstance(path_text, str) or not Path(path_text).expanduser().is_dir():
+                continue
+            parent_id = str(folder.get("parent_id") or "")
+            if parent_id and parent_id not in existing_ids:
+                continue
+            folders.append(folder)
+            existing_ids.add(folder_id)
+            restored += 1
+        return restored
+
+    def restore_trashed_metadata_file(self, item: dict[str, Any], entry: dict[str, Any]) -> None:
+        metadata_file = item.get("metadata_file")
+        metadata_text = entry.get("metadata_text")
+        if not isinstance(metadata_file, str) or not metadata_file:
+            return
+        if not isinstance(metadata_text, str):
+            return
+        try:
+            path = Path(metadata_file).expanduser()
+            if path.exists():
+                return
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(metadata_text, encoding="utf-8")
+        except OSError as exc:
+            log_event(f"could not restore metadata file for returned Trash item: {exc}")
 
     def sync_disk_files(self, data: dict[str, Any]) -> int:
         categories = data.setdefault("categories", [])
@@ -1597,6 +1868,12 @@ class Library:
             if candidate.get("parent_id") == folder_id and candidate.get("id")
         }
         folder_ids = {folder_id, *child_ids}
+        deleted_folder_candidates = [
+            candidate
+            for candidate in data.get("gallery_folders", [])
+            if isinstance(candidate, dict) and candidate.get("id") in folder_ids
+        ]
+        deleted_item_candidates: list[dict[str, Any]] = []
         deleted_items: list[str] = []
         kept_items: list[dict[str, Any]] = []
         for item in data.get("items", []):
@@ -1605,14 +1882,19 @@ class Library:
             if item_folder_id not in folder_ids:
                 kept_items.append(item)
                 continue
-            delete_item_files(item)
+            if isinstance(item, dict):
+                deleted_item_candidates.append(item)
             deleted_items.append(str(item.get("id") or ""))
+        self.remember_deleted_gallery_folders(deleted_folder_candidates, data)
+        self.remember_deleted_items(deleted_item_candidates)
         folder_path = self.gallery_folder_path(folder_id, data)
-        try:
-            if folder_path.exists() and folder_path.is_dir():
-                shutil.rmtree(folder_path)
-        except OSError as exc:
-            raise StudioError(f"Could not delete Gallery folder: {exc}", 500) from exc
+        if folder_path.exists() and folder_path.is_dir():
+            try:
+                safe_move_to_trash(str(folder_path), folder_path.parent)
+            except StudioError as exc:
+                raise StudioError(f"Could not move Gallery folder to {platform_trash_name()}: {exc.message}", exc.status) from exc
+        for item in deleted_item_candidates:
+            delete_item_files(item)
         data["items"] = kept_items
         data["gallery_folders"] = [
             candidate
@@ -1756,6 +2038,12 @@ class Library:
         if not wanted:
             raise StudioError("No items selected.")
         data = self._read()
+        candidates = [
+            item
+            for item in data.get("items", [])
+            if isinstance(item, dict) and item.get("id") in wanted
+        ]
+        self.remember_deleted_items(candidates)
         kept = []
         deleted = []
         for item in data.get("items", []):
@@ -2058,7 +2346,7 @@ class StudioApp:
         if target.exists():
             if not target.is_file():
                 raise StudioError("Upload image is not a file.", 400)
-            target.unlink()
+            safe_move_to_trash(str(target), target.parent)
         return {"ok": True, "uploads": self.list_uploaded_images()}
 
     def account_usage(self, force: bool = False) -> dict[str, Any]:
@@ -2704,12 +2992,13 @@ def summarize_detail(detail: dict[str, Any]) -> str:
 def delete_item_files(item: dict[str, Any]) -> None:
     file_path = item.get("file")
     metadata_path = item.get("metadata_file")
+    delete_file = safe_unlink if item.get("type") == "prompt" else safe_move_to_trash
     if isinstance(file_path, str):
         for root in deletion_roots():
-            safe_unlink(file_path, root)
+            delete_file(file_path, root)
     if isinstance(metadata_path, str):
         for root in deletion_roots():
-            safe_unlink(metadata_path, root)
+            delete_file(metadata_path, root)
 
 
 def deletion_roots() -> list[Path]:
@@ -2878,6 +3167,112 @@ def safe_unlink(path_text: str, root: Path) -> None:
             log_event(f"deleted local file {path}")
     except OSError as exc:
         log_event(f"could not delete {path}: {exc}")
+
+
+def safe_move_to_trash(path_text: str, root: Path) -> None:
+    try:
+        path = Path(path_text).expanduser().resolve()
+        root_resolved = root.resolve()
+    except OSError:
+        return
+    if path != root_resolved and root_resolved not in path.parents:
+        log_event(f"refused to move outside {root_resolved} to Trash: {path}")
+        return
+    if not path.exists():
+        return
+    if not path.is_file() and not path.is_dir():
+        raise StudioError(f"Trash move target is not a file or folder: {path}", 400)
+    try:
+        moved = move_file_to_platform_trash(path)
+    except StudioError:
+        raise
+    except (OSError, shutil.Error, subprocess.SubprocessError) as exc:
+        raise StudioError(f"Could not move to Trash: {exc}", 500) from exc
+    if moved is None:
+        log_event(f"moved local path to {platform_trash_name()} {path}")
+    else:
+        log_event(f"moved local path to {platform_trash_name()} {path} -> {moved}")
+
+
+def move_file_to_platform_trash(path: Path) -> Path | None:
+    if os.name == "nt":
+        move_file_to_windows_recycle_bin(path)
+        return None
+    if sys.platform == "darwin":
+        move_file_to_macos_trash(path)
+        return None
+    trash_dir = linux_trash_files_dir()
+    trash_dir.mkdir(parents=True, exist_ok=True)
+    target = unique_path(trash_dir / path.name)
+    shutil.move(str(path), str(target))
+    return target
+
+
+def platform_trash_name() -> str:
+    if os.name == "nt":
+        return "Recycle Bin"
+    return "Trash"
+
+
+def move_file_to_macos_trash(path: Path) -> None:
+    script = (
+        "tell application \"Finder\"\n"
+        f"delete (POSIX file {applescript_string(str(path))} as alias)\n"
+        "end tell"
+    )
+    result = subprocess.run(
+        ["osascript", "-e", script],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        timeout=30,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "Finder Trash move failed"
+        raise StudioError(f"Could not move file to Trash: {detail}", 500)
+
+
+def linux_trash_files_dir() -> Path:
+    data_home = os.environ.get("XDG_DATA_HOME")
+    return (Path(data_home).expanduser() if data_home else Path.home() / ".local" / "share") / "Trash" / "files"
+
+
+def move_file_to_windows_recycle_bin(path: Path) -> None:
+    powershell = shutil.which("powershell.exe") or shutil.which("powershell")
+    if not powershell:
+        raise StudioError("Windows PowerShell is required to move files or folders to the Recycle Bin.", 500)
+    script = (
+        "Add-Type -AssemblyName Microsoft.VisualBasic; "
+        "$path = $env:GROK_STUDIO_TRASH_PATH; "
+        "if (Test-Path -LiteralPath $path -PathType Leaf) { "
+        "[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile("
+        "$path, "
+        "[Microsoft.VisualBasic.FileIO.UIOption]::OnlyErrorDialogs, "
+        "[Microsoft.VisualBasic.FileIO.RecycleOption]::SendToRecycleBin"
+        ") } elseif (Test-Path -LiteralPath $path -PathType Container) { "
+        "[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory("
+        "$path, "
+        "[Microsoft.VisualBasic.FileIO.UIOption]::OnlyErrorDialogs, "
+        "[Microsoft.VisualBasic.FileIO.RecycleOption]::SendToRecycleBin"
+        ") }"
+    )
+    env = os.environ.copy()
+    env["GROK_STUDIO_TRASH_PATH"] = str(path)
+    result = subprocess.run(
+        [powershell, "-NoProfile", "-Command", script],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=30,
+        env=env,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "Recycle Bin move failed"
+        raise StudioError(f"Could not move to Recycle Bin: {detail}", 500)
 
 
 def media_url(path: Path) -> str:

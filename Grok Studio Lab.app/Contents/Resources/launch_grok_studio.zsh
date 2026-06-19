@@ -7,9 +7,9 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PA
 APP_BUNDLE="$(cd "$(dirname "$0")/../.." && pwd)"
 APP_PARENT="$(dirname "$APP_BUNDLE")"
 BUNDLED_HOME="$APP_BUNDLE/Contents/Resources/GrokStudio"
-DATA_FOLDER_NAME="grok_studio_data_v6"
-PREFERRED_DATA_HOME="$APP_PARENT/$DATA_FOLDER_NAME"
-FALLBACK_DATA_BASE="$HOME/Library/Application Support/Grok Studio Lab/V6/Instances"
+DATA_HOME_BASE="$HOME/Library/Application Support/Grok Studio Lab/V6"
+DEFAULT_DATA_HOME="$DATA_HOME_BASE/Data"
+FALLBACK_DATA_BASE="$DATA_HOME_BASE/Instances"
 HOST="${GROK_STUDIO_HOST:-127.0.0.1}"
 PORT="${GROK_STUDIO_PORT:-8765}"
 
@@ -73,10 +73,10 @@ fi
 
 if [[ -n "${GROK_STUDIO_DATA_DIR:-}" ]]; then
   DATA_HOME="$GROK_STUDIO_DATA_DIR"
-elif [[ "$APP_BUNDLE" == *"/AppTranslocation/"* || ! -w "$APP_PARENT" ]]; then
+elif [[ "$APP_BUNDLE" == *"/AppTranslocation/"* ]]; then
   DATA_HOME="$FALLBACK_DATA_BASE/$(fallback_instance_id)"
 else
-  DATA_HOME="$PREFERRED_DATA_HOME"
+  DATA_HOME="$DEFAULT_DATA_HOME"
 fi
 
 mkdir -p \

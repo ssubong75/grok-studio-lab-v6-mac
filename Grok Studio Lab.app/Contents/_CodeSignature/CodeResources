@@ -10,7 +10,7 @@
 		</data>
 		<key>Resources/GrokStudio/README_GROK_STUDIO.md</key>
 		<data>
-		5/pH7bklBci2G26b5CLcyTI0MFQ=
+		KjfGqpHdoQ/ytCVfCcXz3N3uMqo=
 		</data>
 		<key>Resources/GrokStudio/grok_media.py</key>
 		<data>
@@ -18,7 +18,7 @@
 		</data>
 		<key>Resources/GrokStudio/grok_studio.py</key>
 		<data>
-		w9VUNtBwKa7GoT4doCEdqCLyq5w=
+		gUaRQAtvuFnXsng0jad/Oy0Cj8Q=
 		</data>
 		<key>Resources/GrokStudio/run_grok_studio.command</key>
 		<data>
@@ -34,23 +34,23 @@
 		</data>
 		<key>Resources/GrokStudio/studio_static/app.css</key>
 		<data>
-		vQgUb1hdgBcB37KAt/K765Yrq8Y=
+		GwIhSV7z0b84cDvdbKPkU9Ikk2s=
 		</data>
 		<key>Resources/GrokStudio/studio_static/app.js</key>
 		<data>
-		D9+AVFr5QXUjlXtjLCfMSSqtYXk=
+		DauQqq/j+LmjP+Bavodi55mjLYQ=
 		</data>
 		<key>Resources/GrokStudio/studio_static/editor.css</key>
 		<data>
-		GzA0a0WniDOM2q5cqKD38ehnlYg=
+		yk/uWd/IE0GFI2f6dYBGzvR2KnA=
 		</data>
 		<key>Resources/GrokStudio/studio_static/editor.html</key>
 		<data>
-		aRqnrZXFtTqgpF63NESZZKigr4g=
+		VwoHTKXa8F8xZPbtIGdamRT3O/I=
 		</data>
 		<key>Resources/GrokStudio/studio_static/editor.js</key>
 		<data>
-		kEcrYBt3mQ6Hen9E/kXDcCP+WAw=
+		EL9rlJ39uktTMzyEgjdt7MIIMJc=
 		</data>
 		<key>Resources/GrokStudio/studio_static/icons/imagine/README.md</key>
 		<data>
@@ -114,7 +114,11 @@
 		</data>
 		<key>Resources/GrokStudio/studio_static/index.html</key>
 		<data>
-		rbah5VwrB9cE5I3RpSrbaru7YOs=
+		cjexagYuGIGwIjhhOb2oR9EDUls=
+		</data>
+		<key>Resources/GrokStudio/studio_static/tui-icons.svg</key>
+		<data>
+		WIZSUOx/eJsvbe5ngmNnpjWO+9Q=
 		</data>
 		<key>Resources/GrokStudio/studio_static/vendor/tui-image-editor/THIRD_PARTY_NOTICES.md</key>
 		<data>
@@ -146,7 +150,7 @@
 		</data>
 		<key>Resources/launch_grok_studio.zsh</key>
 		<data>
-		+L3GZHlDSJ4xfYdenVWEQxgXc68=
+		JtpJQ2IO4P3ZlSgw39e9Ntpb9Y4=
 		</data>
 	</dict>
 	<key>files2</key>
@@ -162,7 +166,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			pJtnWHXTfNd36MCswbJ8FVVL5ZbYKcjDISGX56M383c=
+			K67U4epVhjdrA+T0LNF3AJ+m0H8wKDL4IdlAI9ZThEI=
 			</data>
 		</dict>
 		<key>Resources/GrokStudio/grok_media.py</key>
@@ -176,7 +180,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			P9Q3qwtHoIHe03NiGyyEFnZU74Z3AvZT6C2uzugpyJ8=
+			47BbobTr/Qo1VoOAsQhytGACmi223XirFszXkZVBqIk=
 			</data>
 		</dict>
 		<key>Resources/GrokStudio/run_grok_studio.command</key>
@@ -204,35 +208,35 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			Ukp3JsdKaM9+QH+RuukJ8XZYqf6jmK1smqj+XSKmvfI=
+			X3qEmU/0kJ4SU3O4zCnibycNljfuId1j6SjVIkkwkq0=
 			</data>
 		</dict>
 		<key>Resources/GrokStudio/studio_static/app.js</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			BTKydAuvR0kfIW9uUqkaj+Cpb3l6fucj9Iq+OKA2teU=
+			9GPyJ3VyaJnbMSVVPiilZJmPb234bD1uIE1JooiFOpg=
 			</data>
 		</dict>
 		<key>Resources/GrokStudio/studio_static/editor.css</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			Z/MZ4O7y7N+nAAQjCPT5N+xc3T15tbtTRJz7QaXpbsg=
+			1CR1YPm3jSfy904V5c0Vz1f5uQlT6SaG4k7uQ86bR+Q=
 			</data>
 		</dict>
 		<key>Resources/GrokStudio/studio_static/editor.html</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			wEffYWC8LBH0713i0S4LdnvZe9+ADX3bS+pEhszkGQo=
+			rBsXnAq328FgC+Bwgevh9WWLqoiiaH+P+q/lEAJiyYU=
 			</data>
 		</dict>
 		<key>Resources/GrokStudio/studio_static/editor.js</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			vtYdXyZPQog3YMb2OLwJWMoC+wQMsXQ020sT9+dUQbs=
+			MdfQ1dMDqwkK82YtzQLAsTqi2iuaFzKgqrW4+aVqsaA=
 			</data>
 		</dict>
 		<key>Resources/GrokStudio/studio_static/icons/imagine/README.md</key>
@@ -344,7 +348,14 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			1X/a7o/nSHLjD1LrnT4WriAy+BmiktTR/Zq/LOMU5ik=
+			rNH9mwftxDvY/0bjCLQ4xmniWXqNxT6quiKsaCVL/1E=
+			</data>
+		</dict>
+		<key>Resources/GrokStudio/studio_static/tui-icons.svg</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			SaI1E7vji2nVVN0Z9GoEC668rtv57cIAOtrdpPp0Iik=
 			</data>
 		</dict>
 		<key>Resources/GrokStudio/studio_static/vendor/tui-image-editor/THIRD_PARTY_NOTICES.md</key>
@@ -400,7 +411,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			y0x5dCEAIK9gy+mAkDShASrlYyDbgAqyQT4iFcXVnVA=
+			9dnjX9mmXFJu/WoNygcCCL+7DZFSGbYBXPdP026162U=
 			</data>
 		</dict>
 	</dict>

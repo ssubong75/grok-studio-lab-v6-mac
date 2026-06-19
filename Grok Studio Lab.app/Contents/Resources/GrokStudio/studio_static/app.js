@@ -1,6 +1,8 @@
 const requestedPlatform = new URLSearchParams(window.location.search).get("platform");
 const isWindowsPlatform = requestedPlatform === "windows" || /Windows/i.test(String(navigator.userAgent || ""));
 document.documentElement.classList.toggle("platform-windows", isWindowsPlatform);
+const INTERNAL_EDITOR_NAV_KEY = "grokStudioInternalEditorNavigation";
+const IMAGE_EDITOR_SAVED_KEY = "grokStudioImageEditorSavedItemId";
 
 const state = {
   items: [],
@@ -15,6 +17,7 @@ const state = {
   workspaceFolderId: "",
   selectedPrimaryFolderId: "",
   selectedSecondaryFolderId: "",
+  galleryCollectionSelected: true,
   gallerySort: "",
   gallerySavedSort: "",
   galleryDraftLayout: null,
@@ -27,6 +30,7 @@ const state = {
   detailItemId: "",
   detailSelectedSourceUrl: "",
   detailSelectedJobId: "",
+  detailThumbScrollTop: 0,
   detailExtend: false,
   detailExtendStart: 0,
   library: null,
@@ -67,6 +71,7 @@ const els = {
   renameFolderBtn: $("#renameFolderBtn"),
   deleteFolderBtn: $("#deleteFolderBtn"),
   saveGallerySortBtn: $("#saveGallerySortBtn"),
+  collectionHeadingBtn: $("#collectionHeadingBtn"),
   primaryFolderList: $("#primaryFolderList"),
   secondaryFolderGrid: $("#secondaryFolderGrid"),
   secondaryFolderTitle: $("#secondaryFolderTitle"),
@@ -543,6 +548,7 @@ function openFolderGallery(options = {}) {
   state.view = "folder-gallery";
   state.gallerySort = state.gallerySavedSort;
   state.galleryDraftLayout = null;
+  if (!state.selectedPrimaryFolderId) state.galleryCollectionSelected = true;
   state.selectedItems.clear();
   syncWorkspaceView();
   renderFolderGallery();
@@ -561,6 +567,7 @@ function openSecondaryWorkspace(folderId, options = {}) {
   resetWorkspaceComposer();
   state.workspaceFolderId = folder.id;
   state.selectedPrimaryFolderId = folder.parent_id;
+  state.galleryCollectionSelected = false;
   state.view = "gallery";
   syncWorkspaceView();
   renderGallery();
@@ -577,19 +584,48 @@ function folderCardIconHtml() {
   return `<span class="folder-card-icon" aria-hidden="true"><span></span></span>`;
 }
 
+function syncPrimaryFolderListRows() {
+  const list = els.primaryFolderList;
+  if (!list || !list.getClientRects().length) return;
+  const panel = list.closest(".primary-folder-panel");
+  const heading = panel?.querySelector(".folder-panel-heading");
+  if (!panel || !heading) return;
+  const panelStyle = getComputedStyle(panel);
+  const panelGap = parseFloat(panelStyle.rowGap || panelStyle.gap || "0") || 0;
+  const paddingY = (parseFloat(panelStyle.paddingTop) || 0) + (parseFloat(panelStyle.paddingBottom) || 0);
+  const listStyle = getComputedStyle(list);
+  const gap = parseFloat(listStyle.rowGap || listStyle.gap || "0") || 0;
+  const availableHeight = panel.clientHeight - paddingY - heading.offsetHeight - panelGap;
+  if (availableHeight <= 0) return;
+  const rowHeight = Math.max(50, (availableHeight - (gap * 7)) / 8);
+  const listHeight = (rowHeight * 8) + (gap * 7);
+  list.style.setProperty("--primary-folder-row-height", `${rowHeight}px`);
+  list.style.setProperty("--primary-folder-list-height", `${listHeight}px`);
+}
+
+function schedulePrimaryFolderListRows() {
+  requestAnimationFrame(() => requestAnimationFrame(syncPrimaryFolderListRows));
+}
+
 function renderFolderGallery() {
   if (!els.primaryFolderList || !els.secondaryFolderGrid) return;
   const primaryFolders = primaryGalleryFolders();
   if (!primaryFolders.some((folder) => folder.id === state.selectedPrimaryFolderId)) {
     state.selectedPrimaryFolderId = "";
+    state.galleryCollectionSelected = true;
+  } else if (state.selectedPrimaryFolderId) {
+    state.galleryCollectionSelected = false;
   }
   const selectedPrimary = galleryFolderById(state.selectedPrimaryFolderId);
   const secondaryFolders = selectedPrimary ? secondaryGalleryFolders(selectedPrimary.id) : [];
   if (!secondaryFolders.some((folder) => folder.id === state.selectedSecondaryFolderId)) {
     state.selectedSecondaryFolderId = "";
   }
+  const collectionSelected = state.galleryCollectionSelected && !state.selectedPrimaryFolderId && !state.selectedSecondaryFolderId;
+  els.collectionHeadingBtn?.classList.toggle("active", collectionSelected);
+  els.collectionHeadingBtn?.setAttribute("aria-pressed", collectionSelected ? "true" : "false");
   if (els.secondaryFolderTitle) {
-    els.secondaryFolderTitle.textContent = selectedPrimary ? "" : "Select a collection";
+    els.secondaryFolderTitle.textContent = "";
   }
   document.querySelectorAll("[data-gallery-sort]").forEach((button) => {
     button.classList.toggle("active", button.dataset.gallerySort === state.gallerySort);
@@ -599,7 +635,6 @@ function renderFolderGallery() {
       <button class="primary-folder-card${folder.id === state.selectedPrimaryFolderId ? " active" : ""}" type="button" draggable="true" data-primary-folder-id="${escapeHtml(folder.id)}">
         ${folderCardIconHtml()}
         <span class="folder-card-copy"><strong>${escapeHtml(folder.name)}</strong></span>
-        <span class="folder-card-chevron" aria-hidden="true">›</span>
       </button>
     `).join("")
     : `<div class="folder-gallery-empty">No collection yet.</div>`;
@@ -615,12 +650,13 @@ function renderFolderGallery() {
   });
   els.secondaryFolderGrid.innerHTML = secondaryFolders.length
     ? secondarySlots.join("")
-    : `<div class="folder-gallery-empty secondary-empty">${selectedPrimary ? "No workspace in this collection yet." : "Select a collection."}</div>`;
+    : `<div class="folder-gallery-empty secondary-empty">${selectedPrimary ? "No workspace in this collection yet." : ""}</div>`;
   els.primaryFolderList.querySelectorAll("[data-primary-folder-id]").forEach((button) => {
     button.addEventListener("click", () => {
       const nextId = button.dataset.primaryFolderId || "";
       state.selectedPrimaryFolderId = state.selectedPrimaryFolderId === nextId ? "" : nextId;
       state.selectedSecondaryFolderId = "";
+      state.galleryCollectionSelected = !state.selectedPrimaryFolderId;
       renderFolderGallery();
     });
     button.addEventListener("dragstart", (event) => {
@@ -646,6 +682,7 @@ function renderFolderGallery() {
     button.addEventListener("click", () => {
       const nextId = button.dataset.secondaryFolderId || "";
       state.selectedSecondaryFolderId = state.selectedSecondaryFolderId === nextId ? "" : nextId;
+      state.galleryCollectionSelected = false;
       renderFolderGallery();
     });
     button.addEventListener("dblclick", () => openSecondaryWorkspace(button.dataset.secondaryFolderId || ""));
@@ -673,6 +710,7 @@ function renderFolderGallery() {
       ).catch((error) => toastError(error.message));
     });
   });
+  schedulePrimaryFolderListRows();
 }
 
 function closeGalleryActionDialog() {
@@ -740,7 +778,10 @@ async function makeGalleryFolder(options = {}) {
     body: JSON.stringify({ name: name.trim(), parent_id: parentId || undefined }),
   });
   state.galleryFolders = data.state?.gallery_folders || state.galleryFolders;
-  if (!parentId && data.folder?.id) state.selectedPrimaryFolderId = data.folder.id;
+  if (!parentId && data.folder?.id) {
+    state.selectedPrimaryFolderId = data.folder.id;
+    state.galleryCollectionSelected = false;
+  }
   if (options.render !== false) renderFolderGallery();
   return data.folder || null;
 }
@@ -901,7 +942,11 @@ function setImageModel(model) {
 }
 
 function setVideoModel(model) {
-  state.videoModel = model || "";
+  const normalizedModel = model === "grok-imagine-video-1.5-preview"
+    ? "grok-imagine-video-1.5"
+    : model;
+  const allowed = ["", "grok-imagine-video-1.5"];
+  state.videoModel = allowed.includes(normalizedModel) ? normalizedModel : "";
   localStorage.setItem("grokStudioVideoModel", state.videoModel);
   if (els.videoModelInput && els.videoModelInput.value !== state.videoModel) {
     els.videoModelInput.value = state.videoModel;
@@ -1122,11 +1167,17 @@ function unmatchedGalleryJobs(items, jobs = galleryVisualJobs()) {
   });
 }
 
+function selectedDetailJob(item = detailItem()) {
+  const selectedJobId = String(state.detailSelectedJobId || "");
+  if (!selectedJobId || selectedJobId === "media") return null;
+  return detailVisualJobs(item).find((job) => job.id === selectedJobId) || null;
+}
+
 function detailPrimaryVisualJob(item = detailItem()) {
   const jobs = directDetailVisualJobs(item);
   if (state.detailSelectedJobId === "media") return null;
   if (state.detailSelectedJobId) {
-    const selected = detailVisualJobs(item).find((job) => job.id === state.detailSelectedJobId);
+    const selected = selectedDetailJob(item);
     if (selected && selected.status === "failed" && isCreditLimitError(selected.error)) return null;
     if (selected) return selected;
   }
@@ -1880,7 +1931,7 @@ function detailHistoryUrl(itemId = "") {
 }
 
 function replaceDetailHistory(itemId) {
-  if (history.state?.grokStudioView !== "detail" || !itemId) return;
+  if (!itemId) return;
   history.replaceState(
     { ...history.state, grokStudioView: "detail", detailItemId: itemId, workspaceFolderId: state.workspaceFolderId },
     "",
@@ -1897,6 +1948,7 @@ function openDetail(itemId, options = {}) {
   state.detailItemId = item.id;
   state.detailSelectedSourceUrl = "";
   state.detailSelectedJobId = "";
+  state.detailThumbScrollTop = 0;
   state.detailExtend = false;
   state.detailExtendStart = 0;
   syncWorkspaceView();
@@ -1945,6 +1997,7 @@ function closeDetail(options = {}) {
   state.detailItemId = "";
   state.detailSelectedSourceUrl = "";
   state.detailSelectedJobId = "";
+  state.detailThumbScrollTop = 0;
   state.detailExtend = false;
   state.detailExtendStart = 0;
   if (wasDetail) resetComposerAfterDetail();
@@ -1979,12 +2032,17 @@ function renderDetail() {
     document.querySelector(".workspace")?.classList.remove("show-detail");
     return;
   }
+  const workspace = document.querySelector(".workspace");
+  workspace?.classList.add("show-detail");
+  workspace?.classList.remove("show-folder-gallery");
+  if (els.folderGalleryScreen) els.folderGalleryScreen.hidden = true;
   els.detailScreen.hidden = false;
   els.detailScreen.classList.toggle("detail-extend-active", state.detailExtend);
   const versions = detailThumbVersionsFor(item);
   const displayItem = detailDisplayItem(item);
   const visualJob = detailPrimaryVisualJob(item);
   const visualThumbJobs = detailVisualJobs(item).slice(0, 4);
+  const detailThumbCount = versions.length + visualThumbJobs.length;
   const regularMedia = displayItem.type === "video"
     ? videoPlayerHtml(displayItem.local_url, "Video", { compact: false, extraClass: "detail-video-player" })
     : `<img class="detail-image" src="${escapeHtml(displayItem.local_url)}" alt="${escapeHtml(displayItem.prompt || displayItem.title || "Image")}" draggable="false" />`;
@@ -1993,10 +2051,9 @@ function renderDetail() {
     ? '<button class="detail-action edit-detail" type="button" aria-label="Edit image"><span class="detail-edit-glyph" aria-hidden="true">e</span></button>'
     : "";
   els.detailScreen.innerHTML = `
-    <button class="detail-back" type="button" aria-label="Back to library"><span aria-hidden="true">←</span></button>
     <section class="detail-stage ${displayItem.type === "video" ? "is-video" : "is-image"}${visualJob ? " has-generation" : ""}">
       <div class="detail-media-shell">
-        <aside class="detail-stack" aria-label="Versions">
+        <aside class="detail-stack${detailThumbCount > 10 ? " is-scrollable" : ""}" aria-label="Versions">
           ${versions.map((version) => detailThumbHtml(
             version,
             version.type === "source"
@@ -2024,6 +2081,7 @@ function renderDetail() {
       <span>${escapeHtml(item.prompt || "")}</span>
     </div>
   `;
+  restoreDetailThumbScroll();
   bindDetailEvents(item, displayItem);
   bindCustomVideoPlayers();
   bindDetailMediaAspect();
@@ -2106,12 +2164,27 @@ function detailModelBadgeHtml(item) {
   return label ? `<span class="detail-model-badge">${escapeHtml(label)}</span>` : "";
 }
 
+function captureDetailThumbScroll() {
+  const stack = els.detailScreen?.querySelector(".detail-stack");
+  state.detailThumbScrollTop = stack ? stack.scrollTop : 0;
+}
+
+function restoreDetailThumbScroll() {
+  const stack = els.detailScreen?.querySelector(".detail-stack");
+  if (!stack) return;
+  const scrollTop = Math.max(0, Number(state.detailThumbScrollTop || 0));
+  stack.scrollTop = scrollTop;
+  requestAnimationFrame(() => {
+    stack.scrollTop = scrollTop;
+  });
+}
+
 function bindDetailEvents(item, displayItem = item) {
   els.detailScreen.querySelector(".detail-stage")?.addEventListener("click", handleDetailExtendBlankClick);
-  els.detailScreen.querySelector(".detail-back")?.addEventListener("click", closeDetailToWorkspace);
   els.detailScreen.querySelector(".detail-image")?.addEventListener("click", toggleDetailImageFullscreen);
   els.detailScreen.querySelectorAll(".detail-thumb").forEach((button) => {
     button.addEventListener("click", () => {
+      captureDetailThumbScroll();
       if (button.dataset.jobId) {
         const job = state.jobs.find((candidate) => candidate.id === button.dataset.jobId);
         const deselectFailedJob = job?.status === "failed" && state.detailSelectedJobId === job.id;
@@ -2208,20 +2281,8 @@ function openImageEditor(item, displayItem = item) {
   url.searchParams.set("item_id", target.itemId);
   url.searchParams.set("source", target.localUrl);
   url.searchParams.set("name", target.title || "Image");
-  const width = Math.max(900, window.outerWidth || window.innerWidth || 1200);
-  const height = Math.max(680, window.outerHeight || window.innerHeight || 820);
-  const left = Number.isFinite(window.screenX) ? window.screenX : 0;
-  const top = Number.isFinite(window.screenY) ? window.screenY : 0;
-  const popup = window.open(
-    url.toString(),
-    "grokStudioImageEditor",
-    `popup=yes,width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=no`,
-  );
-  if (!popup) {
-    toastError("Allow pop-ups to open the image editor.");
-    return;
-  }
-  popup.focus();
+  sessionStorage.setItem(INTERNAL_EDITOR_NAV_KEY, "1");
+  window.location.href = url.toString();
 }
 
 function libraryImageByUrl(url) {
@@ -2274,15 +2335,26 @@ function imageEditorTarget(item, displayItem = item) {
 
 async function handleImageEditorMessage(event) {
   if (event.origin !== window.location.origin || event.data?.type !== "grok-studio-image-edit-saved") return;
-  const itemId = String(event.data.itemId || "");
+  await handleImageEditorSavedItem(String(event.data.itemId || ""));
+}
+
+async function handleImageEditorSavedItem(itemId) {
   if (!itemId) return;
   await loadState();
   if (!galleryItemById(itemId)) return;
-  state.detailItemId = itemId;
+  openDetail(itemId, { fromHistory: true });
   state.detailSelectedSourceUrl = "";
   state.detailSelectedJobId = "media";
   replaceDetailHistory(itemId);
   renderDetail();
+}
+
+async function consumeImageEditorReturn() {
+  sessionStorage.removeItem(INTERNAL_EDITOR_NAV_KEY);
+  const itemId = sessionStorage.getItem(IMAGE_EDITOR_SAVED_KEY) || "";
+  if (!itemId) return;
+  sessionStorage.removeItem(IMAGE_EDITOR_SAVED_KEY);
+  await handleImageEditorSavedItem(itemId);
 }
 
 function toggleDetailImageFullscreen(event) {
@@ -2318,11 +2390,29 @@ function openDetailImageFullscreen(src) {
 }
 
 async function deleteDetailItem(item, displayItem = item) {
+  const selectedJob = selectedDetailJob(item);
+  if (selectedJob) {
+    const ok = await openGalleryActionDialog({
+      title: "Delete thumbnail",
+      message: "Delete this selected thumbnail?",
+      confirmLabel: "Delete",
+    });
+    if (!ok) return;
+    await api(`/api/jobs/${selectedJob.id}/dismiss`, { method: "POST", body: "{}" });
+    state.jobs = state.jobs.filter((candidate) => candidate.id !== selectedJob.id);
+    state.detailSelectedJobId = "media";
+    await loadState();
+    state.detailSelectedJobId = "media";
+    renderDetail();
+    toast("Deleted selected thumbnail.");
+    return;
+  }
   if (state.detailSelectedSourceUrl || displayItem?.type === "source") {
     toastError("Original source thumbnails are kept.");
     return;
   }
-  const target = galleryItemById(item?.id);
+  const selectedMediaId = displayItem?.id && galleryItemById(displayItem.id) ? displayItem.id : item?.id;
+  const target = galleryItemById(selectedMediaId);
   if (!target) {
     toastError("Select a Library thumbnail to delete.");
     return;
@@ -2793,7 +2883,7 @@ function handleDetailExtendBlankClick(event) {
   if (!target) return;
   if (target.closest(".lab-composer, .detail-prompt-pill")) return;
   if (!target.closest("#detailScreen") && !target.closest(".workspace.show-detail")) return;
-  const protectedSelectors = [".detail-back", ".detail-media-wrap", ".detail-stack", ".detail-actions"];
+  const protectedSelectors = [".detail-media-wrap", ".detail-stack", ".detail-actions"];
   const withinProtectedArea = protectedSelectors.some((selector) => {
     const node = els.detailScreen?.querySelector(selector);
     if (!node) return false;
@@ -3621,6 +3711,7 @@ function selectedImageModel() {
 }
 
 function selectedVideoModel() {
+  if (state.videoModel === "grok-imagine-video-1.5-preview") return "grok-imagine-video-1.5";
   return state.videoModel || undefined;
 }
 
@@ -4819,6 +4910,7 @@ function bindEvents() {
   setSidebarCollapsed(state.sidebarCollapsed);
   window.addEventListener("resize", () => {
     if (!state.sidebarCollapsed) updateSidebarTogglePosition();
+    if (state.view === "folder-gallery") schedulePrimaryFolderListRows();
   });
   initCustomSelects();
   els.sidebarCloseBtn.addEventListener("click", () => setSidebarCollapsed(!state.sidebarCollapsed));
@@ -4834,6 +4926,12 @@ function bindEvents() {
   });
   els.saveGallerySortBtn?.addEventListener("click", () => {
     saveCurrentGallerySort().catch((error) => toastError(error.message));
+  });
+  els.collectionHeadingBtn?.addEventListener("click", () => {
+    state.galleryCollectionSelected = true;
+    state.selectedPrimaryFolderId = "";
+    state.selectedSecondaryFolderId = "";
+    renderFolderGallery();
   });
   els.makeFolderBtn?.addEventListener("click", () => {
     makeGalleryFolder().catch((error) => toastError(error.message));
@@ -5133,6 +5231,7 @@ async function pollJobs() {
 }
 
 function sendShutdownSignal() {
+  if (sessionStorage.getItem(INTERNAL_EDITOR_NAV_KEY) === "1") return;
   if (state.shutdownSent) return;
   state.shutdownSent = true;
   const body = JSON.stringify({ event: "tab-close", at: new Date().toISOString() });
@@ -5165,6 +5264,9 @@ initializeBrowserHistory();
 bindEvents();
 window.addEventListener("message", (event) => {
   handleImageEditorMessage(event).catch((error) => toastError(error.message));
+});
+window.addEventListener("pageshow", () => {
+  consumeImageEditorReturn().catch((error) => toastError(error.message));
 });
 setMode("image");
 autoSizePromptInput();
